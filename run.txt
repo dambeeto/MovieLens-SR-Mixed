@@ -1,0 +1,60 @@
+== MovieLens-SR-Mixed -- uruchomienie pipeline'u przygotowania danych + KMeans ==
+
+WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~875 MB + parquet).
+
+1. Setup srodowiska
+   python -m venv .venv
+   .\.venv\Scripts\Activate.ps1        # PowerShell (Windows)
+   # source .venv/bin/activate         # bash (Linux/Mac)
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
+
+2. Pobranie danych (ml-1m + ml-20m z files.grouplens.org)
+   python scripts/01_download.py
+   # ~5 min na 20M; 1M jest natychmiastowy. Skrypt idempotentny -- pomija jesli pliki juz sa.
+
+3. Czyszczenie, identyfikacja brakow, podzial train/test, zapis parquet
+   python scripts/02_clean.py
+   # Wynik:
+   #   data/processed/{users_1m,movies_1m,ratings_1m,ratings_20m,tags_20m}.parquet
+   #   data/processed/{train,test}.parquet (chronologiczny split 80/20 na ratings_1m)
+   #   reports/missing_report.csv
+
+4. Analiza wstepna (EDA) -- wykresy
+   python scripts/03_eda.py
+   # Wynik: reports/ratings_distribution.png, users_demographics.png,
+   #        genres_popularity.png, ratings_over_time.png
+
+5. Budowa cech uzytkownikow (macierz user x feature)
+   python scripts/04_features.py
+   # Wynik: data/processed/user_features.parquet (~6040 userow x ~59 cech)
+
+6. Trening KMeans + interpretacja klastrow
+   python scripts/05_cluster.py
+   # Wynik:
+   #   models/{scaler,kmeans}.joblib
+   #   reports/k_selection.csv (silhouette + davies_bouldin dla k=2..15)
+   #   reports/clusters_pca.png
+   #   reports/cluster_profiles.csv
+   #   data/processed/user_clusters.parquet (user_id -> cluster_id)
+   #   log w konsoli z opisem kazdego klastra
+
+== Sprawdzenie poprawnosci wynikow ==
+
+- data/processed/users_1m.parquet      -> 6040 wierszy, brak NaN w kolumnach demograficznych
+- data/processed/ratings_1m.parquet    -> 1_000_209 wierszy, ratingi w {1,2,3,4,5}
+- data/processed/ratings_20m.parquet   -> 20_000_263 wiersze, ratingi w [0.5, 5.0]
+- reports/missing_report.csv           -> istnieje, lista kolumn z % brakow
+- reports/k_selection.csv              -> 14 wierszy (k od 2 do 15), wybrane k* z najwyzszym silhouette
+- silhouette_score dla wybranego k*    -> > 0.10 (realistyczny prog dla mieszanych cech)
+- models/kmeans.joblib + scaler.joblib -> laduja sie przez joblib.load,
+                                          predict na nowym profilu zwraca cluster_id w [0, k*-1]
+
+== Klasyfikacja nowego profilu uzytkownika do klastra (uzycie modelu) ==
+
+  import joblib, pandas as pd
+  scaler = joblib.load("models/scaler.joblib")
+  kmeans = joblib.load("models/kmeans.joblib")
+  feature_cols = joblib.load("models/feature_cols.joblib")  # lista nazw kolumn w tej samej kolejnosci
+  new_profile = pd.DataFrame([{...}])[feature_cols]         # wypelnione zera tam gdzie brak ocen
+  cluster_id = int(kmeans.predict(scaler.transform(new_profile))[0])
