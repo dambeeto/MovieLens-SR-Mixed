@@ -39,6 +39,20 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
    #   data/processed/user_clusters.parquet (user_id -> cluster_id)
    #   log w konsoli z opisem kazdego klastra
 
+7. Klasyfikacja sentymentu tagow (iteracja 2)
+   python scripts/06_sentiment.py
+   # Wymaga: data/processed/tags_20m.parquet (powstaje w kroku 3).
+   # Wynik:
+   #   data/processed/tags_labeled.parquet  (tagi + sentiment + vader_compound)
+   #   models/sentiment/pipeline.joblib     (TF-IDF + klasyfikator)
+   #   models/sentiment/label_classes.joblib
+   #   reports/sentiment/cv_results.csv        (5-fold CV, 3 modele = 15 wierszy)
+   #   reports/sentiment/model_comparison.csv  (mean +/- std macro-F1 per model)
+   #   reports/sentiment/class_distribution.csv
+   #   reports/sentiment/confusion_matrix.png
+   #   reports/sentiment/top_words.csv         (jesli wygral model z coef_)
+   #   log w konsoli: 3 przykladowe predykcje + smoke test predict_sentiment()
+
 == Sprawdzenie poprawnosci wynikow ==
 
 - data/processed/users_1m.parquet      -> 6040 wierszy, brak NaN w kolumnach demograficznych
@@ -49,6 +63,10 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
 - silhouette_score dla wybranego k*    -> > 0.10 (realistyczny prog dla mieszanych cech)
 - models/kmeans.joblib + scaler.joblib -> laduja sie przez joblib.load,
                                           predict na nowym profilu zwraca cluster_id w [0, k*-1]
+- data/processed/tags_labeled.parquet  -> ~465k wierszy, kolumny tag/sentiment/vader_compound
+- reports/sentiment/cv_results.csv     -> 15 wierszy (3 modele x 5 foldow)
+- reports/sentiment/model_comparison.csv -> najlepszy model ma macro-F1 >= 0.55
+- models/sentiment/pipeline.joblib     -> laduje sie, predict("amazing") zwraca "positive"
 
 == Klasyfikacja nowego profilu uzytkownika do klastra (uzycie modelu) ==
 
@@ -58,3 +76,13 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
   feature_cols = joblib.load("models/feature_cols.joblib")  # lista nazw kolumn w tej samej kolejnosci
   new_profile = pd.DataFrame([{...}])[feature_cols]         # wypelnione zera tam gdzie brak ocen
   cluster_id = int(kmeans.predict(scaler.transform(new_profile))[0])
+
+== Klasyfikacja nowego komentarza/taga (uzycie modelu sentymentu) ==
+
+  from src.sentiment.predict import predict_sentiment
+  out = predict_sentiment(["this movie was amazing", "boring and predictable"])
+  # out = [
+  #   {"text": "...", "label": "positive",
+  #    "probabilities": {"negative": 0.04, "neutral": 0.12, "positive": 0.84}},
+  #   ...
+  # ]
