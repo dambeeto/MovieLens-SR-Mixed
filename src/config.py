@@ -16,6 +16,14 @@ REPORTS_SENTIMENT_DIR = REPORTS_DIR / "sentiment"
 MODELS_RECSYS_DIR = MODELS_DIR / "recsys"
 REPORTS_RECSYS_DIR = REPORTS_DIR / "recsys"
 
+MODELS_POPULARITY_DIR = MODELS_DIR / "popularity"
+REPORTS_POPULARITY_DIR = REPORTS_DIR / "popularity"
+
+REPORTS_BONUS_DIR = REPORTS_DIR / "bonus"
+MODELS_BONUS_DIR = MODELS_DIR / "bonus"
+
+STATIC_DIR = PROJECT_ROOT / "static"
+
 ML_1M_DIR = RAW_DIR / "ml-1m"
 ML_20M_DIR = RAW_DIR / "ml-20m"
 
@@ -82,6 +90,13 @@ RECSYS_KNN_NEIGHBORS = 30      # item-based KNN neighbours
 RECSYS_TOP_N = 10              # default top-N recommendation length
 RECSYS_LIKE_THRESHOLD = 4.0    # rating threshold for hit-rate@K "relevant" definition
 
+# Popularity regression (iteration 4): time series aggregation + walk-forward forecasting.
+POPULARITY_TEST_QUARTERS = 4   # how many of the latest quarters are held out for evaluation
+POPULARITY_LAGS = (1, 2, 4)    # quarter offsets used as autoregressive features
+
+# Bonus tasks: outlier detection + feature selection.
+OUTLIER_CONTAMINATION = 0.05   # IsolationForest expected fraction of outliers
+
 
 def ensure_dirs() -> None:
     for d in (
@@ -93,5 +108,10 @@ def ensure_dirs() -> None:
         REPORTS_SENTIMENT_DIR,
         MODELS_RECSYS_DIR,
         REPORTS_RECSYS_DIR,
+        MODELS_POPULARITY_DIR,
+        REPORTS_POPULARITY_DIR,
+        REPORTS_BONUS_DIR,
+        MODELS_BONUS_DIR,
+        STATIC_DIR,
     ):
         d.mkdir(parents=True, exist_ok=True)

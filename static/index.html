@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <title>MovieLens-SR-Mixed</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg: #0f1419;
+      --panel: #1a2230;
+      --border: #2c3a4e;
+      --text: #e8ecf1;
+      --muted: #8a9bb0;
+      --accent: #5aa6ff;
+      --accent-hi: #7cb8ff;
+      --good: #6cd07a;
+      --bad: #f37272;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 20px 32px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, var(--panel), var(--bg));
+    }
+    header h1 { margin: 0; font-size: 22px; }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    nav {
+      display: flex; gap: 4px;
+      padding: 0 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+    }
+    nav button {
+      background: none; border: none; color: var(--muted);
+      padding: 14px 18px; cursor: pointer; font-size: 14px;
+      border-bottom: 2px solid transparent;
+    }
+    nav button:hover { color: var(--text); }
+    nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+    main { padding: 24px 32px; max-width: 1100px; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+    h2 { font-size: 18px; margin: 0 0 12px; }
+    p.hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+    .row { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+    input, select, textarea, button.primary {
+      background: var(--panel);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+    textarea { width: 100%; min-height: 80px; resize: vertical; }
+    button.primary {
+      background: var(--accent); color: #0f1419; border-color: var(--accent);
+      cursor: pointer; font-weight: 600;
+    }
+    button.primary:hover { background: var(--accent-hi); }
+    .result {
+      margin-top: 20px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+    }
+    .result pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+    .badge.positive, .badge.up { background: rgba(108, 208, 122, 0.15); color: var(--good); }
+    .badge.negative, .badge.down { background: rgba(243, 114, 114, 0.15); color: var(--bad); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .grid label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); }
+    .grid input { margin-top: 4px; }
+    .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
+    .status .ok { color: var(--good); }
+    .status .miss { color: var(--bad); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MovieLens-SR-Mixed &mdash; demo aplikacji</h1>
+    <p>System rekomendacji + klasyfikacja sentymentu + profilowanie userow + prognoza popularnosci.</p>
+    <p class="status" id="health">Sprawdzam dostepne modele&hellip;</p>
+  </header>
+
+  <nav>
+    <button class="active" data-tab="sentiment">Sentyment komentarza</button>
+    <button data-tab="recommend">Rekomendacje</button>
+    <button data-tab="forecast">Prognoza popularnosci</button>
+    <button data-tab="cluster">Profil &rarr; klaster</button>
+  </nav>
+
+  <main>
+    <!-- TAB: sentiment -->
+    <section class="tab active" id="tab-sentiment">
+      <h2>Klasyfikacja sentymentu komentarza</h2>
+      <p class="hint">Wpisz krotki komentarz / opinie. Model TF-IDF + Logistic Regression klasyfikuje jako positive / negative (trening: tagi z MovieLens 20M, etykiety przez VADER po filtrze POS).</p>
+      <textarea id="sentiment-text" placeholder="np. 'this movie was amazing'"></textarea>
+      <div class="row" style="margin-top:8px;">
+        <button class="primary" onclick="runSentiment()">Klasyfikuj</button>
+      </div>
+      <div class="result" id="sentiment-result" style="display:none"></div>
+    </section>
+
+    <!-- TAB: recommend -->
+    <section class="tab" id="tab-recommend">
+      <h2>Top-N rekomendacji dla uzytkownika</h2>
+      <p class="hint">Collaborative filtering na ml-1m. Wybierz model i podaj user_id (1..6040).</p>
+      <div class="row">
+        <input id="rec-uid" type="number" placeholder="user_id (np. 1)" value="1" min="1" style="width:160px">
+        <select id="rec-model">
+          <option value="svd">SVD (k=50)</option>
+          <option value="knn_cosine">Item-KNN cosine</option>
+          <option value="knn_pearson">Item-KNN pearson</option>
+        </select>
+        <input id="rec-n" type="number" value="10" min="1" max="50" style="width:90px">
+        <button class="primary" onclick="runRecommend()">Polec mi 10 filmow</button>
+        <button onclick="loadSampleUsers()">Przykladowe ID</button>
+      </div>
+      <div class="result" id="rec-result" style="display:none"></div>
+    </section>
+
+    <!-- TAB: forecast -->
+    <section class="tab" id="tab-forecast">
+      <h2>Prognoza popularnosci gatunku na kolejny kwartal</h2>
+      <p class="hint">Regresja na agregatach (gatunek, kwartal) z ml-20m. Trening na okresie 1995&ndash;ostatnie ~4 kwartaly, prognoza dla nastepnego.</p>
+      <div class="row">
+        <select id="genre-select" style="min-width: 240px">
+          <option>(laduje gatunki...)</option>
+        </select>
+        <button class="primary" onclick="runForecast()">Prognozuj</button>
+        <button onclick="forecastAll()">Pokaz wszystkie</button>
+      </div>
+      <div class="result" id="fc-result" style="display:none"></div>
+    </section>
+
+    <!-- TAB: cluster -->
+    <section class="tab" id="tab-cluster">
+      <h2>Przypisanie profilu uzytkownika do klastra</h2>
+      <p class="hint">Podaj kilka cech profilu &mdash; KMeans wskaze grupe. Pola ktorych nie wypelnisz dostana 0.</p>
+      <div id="cluster-form" class="grid"></div>
+      <div class="row" style="margin-top: 12px;">
+        <button class="primary" onclick="runCluster()">Przypisz do klastra</button>
+        <button onclick="randomFillCluster()">Losowy profil</button>
+      </div>
+      <div class="result" id="cluster-result" style="display:none"></div>
+    </section>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const tab = btn.dataset.tab;
+    document.querySelectorAll(".tab").forEach(s => s.classList.remove("active"));
+    $("tab-" + tab).classList.add("active");
+  });
+});
+
+async function jsonOrError(resp) {
+  if (!resp.ok) {
+    const t = await resp.text();
+    throw new Error("HTTP " + resp.status + ": " + t);
+  }
+  return resp.json();
+}
+
+function show(target, payload) {
+  const el = $(target);
+  el.style.display = "block";
+  el.innerHTML = "<pre>" + JSON.stringify(payload, null, 2) + "</pre>";
+}
+
+function renderTable(rows, columns) {
+  let html = "<table><thead><tr>";
+  columns.forEach(c => html += "<th>" + c + "</th>");
+  html += "</tr></thead><tbody>";
+  rows.forEach(r => {
+    html += "<tr>";
+    columns.forEach(c => html += "<td>" + (r[c] === null || r[c] === undefined ? "" : r[c]) + "</td>");
+    html += "</tr>";
+  });
+  return html + "</tbody></table>";
+}
+
+// ----- Health bar -----
+fetch("/api/health").then(jsonOrError).then(d => {
+  const parts = Object.entries(d.ready).map(([k, v]) =>
+    `<span class="${v ? "ok" : "miss"}">${k}: ${v ? "OK" : "BRAK"}</span>`);
+  $("health").innerHTML = parts.join(" &nbsp;|&nbsp; ");
+}).catch(() => { $("health").textContent = "API nieosiagalne"; });
+
+// ----- Sentiment -----
+async function runSentiment() {
+  const text = $("sentiment-text").value.trim();
+  if (!text) return;
+  try {
+    const r = await fetch("/api/sentiment", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({text})
+    }).then(jsonOrError);
+    let html = `<div style="font-size:18px;font-weight:600;margin-bottom:8px">
+      <span class="badge ${r.label}">${r.label}</span>
+    </div>`;
+    if (r.probabilities) {
+      html += "<table><tr><th>klasa</th><th>prawdopodobienstwo</th></tr>";
+      for (const [k, v] of Object.entries(r.probabilities)) {
+        html += `<tr><td>${k}</td><td>${(v*100).toFixed(1)}%</td></tr>`;
+      }
+      html += "</table>";
+    }
+    $("sentiment-result").style.display = "block";
+    $("sentiment-result").innerHTML = html;
+  } catch (e) { show("sentiment-result", {error: e.message}); }
+}
+
+// ----- Recommend -----
+async function runRecommend() {
+  const uid = $("rec-uid").value;
+  const model = $("rec-model").value;
+  const n = $("rec-n").value || 10;
+  try {
+    const r = await fetch(`/api/recommend/${uid}?n=${n}&model=${model}`).then(jsonOrError);
+    let html = `<p class="hint">user_id=${r.user_id} &middot; model=${r.model}</p>`;
+    html += renderTable(
+      r.recommendations.map((x, i) => ({...x, rank: i+1, predicted_rating: x.predicted_rating.toFixed(2)})),
+      ["rank", "movie_id", "title", "year", "predicted_rating"]
+    );
+    $("rec-result").style.display = "block";
+    $("rec-result").innerHTML = html;
+  } catch (e) { show("rec-result", {error: e.message}); }
+}
+
+async function loadSampleUsers() {
+  try {
+    const r = await fetch("/api/users/sample?n=8").then(jsonOrError);
+    show("rec-result", r);
+  } catch (e) { show("rec-result", {error: e.message}); }
+}
+
+// ----- Forecast -----
+async function refreshGenres() {
+  try {
+    const r = await fetch("/api/genres").then(jsonOrError);
+    const sel = $("genre-select");
+    sel.innerHTML = "";
+    r.genres.forEach(g => {
+      const opt = document.createElement("option");
+      opt.value = g; opt.textContent = g;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    $("genre-select").innerHTML = "<option>brak modelu popularnosci</option>";
+  }
+}
+refreshGenres();
+
+async function runForecast() {
+  const g = $("genre-select").value;
+  if (!g || g.startsWith("brak")) return;
+  try {
+    const r = await fetch(`/api/forecast/${encodeURIComponent(g)}`).then(jsonOrError);
+    let html = `<p class="hint">Model: ${r.based_on_model} &middot; horyzont: ${r.next_period}</p>`;
+    html += `<div style="font-size:24px;font-weight:600">${r.genre}: <span style="color:var(--accent)">${r.predicted_n_ratings.toLocaleString()}</span> ocen</div>`;
+    html += `<p class="hint">log1p(predicted) = ${r.predicted_log}</p>`;
+    $("fc-result").style.display = "block";
+    $("fc-result").innerHTML = html;
+  } catch (e) { show("fc-result", {error: e.message}); }
+}
+
+async function forecastAll() {
+  try {
+    const r = await fetch("/api/genres").then(jsonOrError);
+    const rows = [];
+    for (const g of r.genres) {
+      const f = await fetch(`/api/forecast/${encodeURIComponent(g)}`).then(jsonOrError);
+      rows.push({genre: f.genre, next_period: f.next_period, predicted_n_ratings: f.predicted_n_ratings});
+    }
+    rows.sort((a, b) => b.predicted_n_ratings - a.predicted_n_ratings);
+    $("fc-result").style.display = "block";
+    $("fc-result").innerHTML = renderTable(rows, ["genre", "next_period", "predicted_n_ratings"]);
+  } catch (e) { show("fc-result", {error: e.message}); }
+}
+
+// ----- Cluster -----
+async function buildClusterForm() {
+  try {
+    const r = await fetch("/api/cluster/template").then(jsonOrError);
+    const cont = $("cluster-form");
+    cont.innerHTML = "";
+    // Show the most useful (~12) features in the form; rest will be 0 by default.
+    const visible = r.feature_cols.filter(c =>
+      c.startsWith("rmean_") || c === "age_midpoint" || c === "is_female"
+    ).slice(0, 12);
+    visible.forEach(name => {
+      const lbl = document.createElement("label");
+      lbl.textContent = name;
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.step = "0.01"; inp.value = ""; inp.dataset.name = name;
+      inp.placeholder = "0";
+      lbl.appendChild(inp);
+      cont.appendChild(lbl);
+    });
+  } catch (e) {
+    $("cluster-form").innerHTML = '<p class="hint" style="color:var(--bad)">' + e.message + "</p>";
+  }
+}
+buildClusterForm();
+
+async function runCluster() {
+  const inputs = document.querySelectorAll("#cluster-form input");
+  const features = {};
+  inputs.forEach(i => {
+    const v = parseFloat(i.value);
+    if (!isNaN(v)) features[i.dataset.name] = v;
+  });
+  try {
+    const r = await fetch("/api/cluster", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({features})
+    }).then(jsonOrError);
+    $("cluster-result").style.display = "block";
+    $("cluster-result").innerHTML = `<div style="font-size:24px;font-weight:600">Klaster <span style="color:var(--accent)">${r.cluster_id}</span> z ${r.n_clusters}</div>
+      <p class="hint">Profil zostal znormalizowany przez wczesniej dopasowany StandardScaler i przypisany przez KMeans.</p>
+      <pre>${JSON.stringify(features, null, 2)}</pre>`;
+  } catch (e) { show("cluster-result", {error: e.message}); }
+}
+
+function randomFillCluster() {
+  const inputs = document.querySelectorAll("#cluster-form input");
+  inputs.forEach(i => {
+    if (i.dataset.name === "age_midpoint") i.value = (20 + Math.floor(Math.random()*40));
+    else if (i.dataset.name === "is_female") i.value = Math.random() < 0.5 ? 0 : 1;
+    else i.value = (3 + Math.random() * 2).toFixed(2);  // rmean_* in [3, 5]
+  });
+}
+</script>
+</body>
+</html>

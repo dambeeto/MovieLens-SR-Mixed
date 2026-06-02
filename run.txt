@@ -1,4 +1,4 @@
-== MovieLens-SR-Mixed -- uruchomienie pipeline'u przygotowania danych + KMeans + Sentyment + Rekomendacje ==
+== MovieLens-SR-Mixed -- pelny pipeline: dane + KMeans + sentyment + rekomendacje + popularnosc + bonusy + FastAPI ==
 
 WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~875 MB + parquet).
 
@@ -53,7 +53,7 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
    # Statystyki: 465_541 tagow -> 117_365 po filtrze POS -> 44_272 po usunieciu neutralnych
    # Wyniki: accuracy=0.99, F1 macro=0.98
 
-8. System rekomendacji filmow (collaborative filtering na ml-1m)
+8a. System rekomendacji filmow (collaborative filtering na ml-1m)
    python scripts/07_recsys.py
    # Wymaga: data/processed/{train,test,movies_1m}.parquet (powstaja w kroku 3).
    # Pipeline:
@@ -72,6 +72,47 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
    #   reports/recsys/rating_predictions_scatter.png     (pred vs actual dla najlepszego modelu)
    #   log w konsoli z porownaniem modeli + przykladowa top-10 listy filmow
 
+8b. Prognoza popularnosci gatunkow (regresja czasowa na ml-20m)
+   python scripts/08_popularity.py
+   # Wymaga: data/processed/ratings_20m.parquet (powstaje w kroku 3) + ml-20m/movies.csv (kr. 2).
+   # Pipeline:
+   #   1. Agregacja po (gatunek, kwartal) z multi-genre filmow z 20m -- ~20 gatunkow x ~80 kwartalow
+   #   2. Drop niepelnego ostatniego kwartalu (ml-20m konczy sie mid-Q1 2015)
+   #   3. Features: log1p(n_ratings), sezonowosc sin/cos, lagi (1,2,4), rolling mean 4
+   #   4. Trening + walk-forward eval na ostatnich 4 kwartalach: LinearRegression vs Ridge vs RandomForest
+   #   5. Prognoza next-quarter dla wszystkich gatunkow
+   # Wynik:
+   #   models/popularity/{best_model, history, meta}.joblib/parquet
+   #   reports/popularity/model_comparison.csv         (RMSE-log / MAE / MAPE per model)
+   #   reports/popularity/forecast_next.csv            (prognoza dla kazdego gatunku)
+   #   reports/popularity/time_series_per_genre.png    (top-8 gatunkow + zaznaczona prognoza)
+
+9. Bonusy: identyfikacja outlierow + selekcja atrybutow
+   python scripts/09_bonus.py
+   # Wymaga: data/processed/user_features.parquet (krok 5) + user_clusters.parquet (krok 6).
+   # Wynik:
+   #   data/processed/user_outliers.parquet
+   #   models/bonus/{isolation_forest, isolation_scaler}.joblib
+   #   reports/bonus/outliers_pca.png                  (scatter z czerwonymi outlierami)
+   #   reports/bonus/top_anomalous_users.csv           (top-10 najbardziej anomalnych)
+   #   reports/bonus/variance_report.csv               (per-feature variance, low_variance flag)
+   #   reports/bonus/mutual_info_top20.csv             (top-20 cech vs cluster_id)
+
+10. Aplikacja webowa (FastAPI + UI)
+   uvicorn main:app --reload
+   # Domyslnie http://127.0.0.1:8000
+   # Endpointy:
+   #   GET  /                       -> single-page UI (static/index.html)
+   #   GET  /api/health             -> flagi dostepnosci modeli
+   #   POST /api/sentiment          -> body {"text":"..."} -> {label, probabilities}
+   #   POST /api/cluster            -> body {"features":{...}} -> {cluster_id, n_clusters}
+   #   GET  /api/recommend/{uid}    -> top-N rekomendacji; ?n=10&model=svd|knn_cosine|knn_pearson
+   #   GET  /api/forecast/{genre}   -> prognoza next-quarter dla gatunku
+   #   GET  /api/genres             -> lista dostepnych gatunkow
+   #   GET  /api/users/sample       -> przykladowe user_ids w indeksie recsys
+   # UI ma 4 zakladki: Sentyment, Rekomendacje, Prognoza, Profil->Klaster.
+   # Health-bar na gorze pokazuje co jest gotowe (sentiment / cluster / recsys / popularity).
+
 == Sprawdzenie poprawnosci wynikow ==
 
 - data/processed/users_1m.parquet      -> 6040 wierszy, brak NaN w kolumnach demograficznych
@@ -89,6 +130,12 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
 - reports/recsys/similarity_comparison.csv -> cosine vs pearson, jeden zwykle wygrywa min. 1 metryke
 - models/recsys/svd.joblib + item_knn_*.joblib -> laduja sie, top_n_for_user(user_id=1, n=10)
                                                   zwraca 10 slownikow z movie_id+title+predicted_rating
+- reports/popularity/model_comparison.csv  -> 3 wiersze (linear/ridge/random_forest), rmse_log_test < ~0.4
+- reports/popularity/forecast_next.csv     -> ~20 wierszy (po gatunku), predicted_n_ratings > 0
+- models/popularity/best_model.joblib      -> laduje sie, forecast_next_quarter("Drama") zwraca dict
+- reports/bonus/outliers_pca.png           -> scatter PCA z ~5% punktow w kolorze czerwonym
+- reports/bonus/mutual_info_top20.csv      -> 20 wierszy, wartosci mutual_info > 0 dla top cech
+- GET http://127.0.0.1:8000/api/health     -> {"ready":{"sentiment":true,"cluster":true,"recsys":true,"popularity":true}}
 
 == Klasyfikacja nowego profilu uzytkownika do klastra (uzycie modelu) ==
 
@@ -118,3 +165,20 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
   # ]
   # model_name moze byc: "svd", "knn_cosine", "knn_pearson"
   # filmy ktore user 1 widzial w trainie sa automatycznie wykluczone
+
+== Prognoza popularnosci gatunku (uzycie modelu) ==
+
+  from src.popularity.predict import forecast_next_quarter
+  forecast = forecast_next_quarter("Drama")
+  # {"genre": "Drama", "next_period": "2015-06-30",
+  #  "predicted_log": 9.21, "predicted_n_ratings": 9999,
+  #  "based_on_model": "random_forest"}
+
+== Wywolanie API z curl ==
+
+  curl http://127.0.0.1:8000/api/health
+  curl -X POST http://127.0.0.1:8000/api/sentiment ^
+       -H "Content-Type: application/json" ^
+       -d "{\"text\":\"this movie was amazing\"}"
+  curl http://127.0.0.1:8000/api/recommend/1?n=5
+  curl http://127.0.0.1:8000/api/forecast/Drama
