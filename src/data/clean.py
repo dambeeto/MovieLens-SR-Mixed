@@ -43,9 +43,12 @@ def report_missing(df: pd.DataFrame, dataset: str) -> pd.DataFrame:
 def clean_users_1m(users: pd.DataFrame) -> pd.DataFrame:
     out = users.copy()
     out["age_label"] = out["age_code"].map(AGE_CODE_TO_LABEL).astype("string")
-    out["age_midpoint"] = out["age_code"].map(AGE_CODE_TO_MIDPOINT).astype("int8")
-    out["occupation_label"] = out["occupation_code"].map(OCCUPATION_CODE_TO_LABEL).astype("string")
-    out["zip5"] = out["zip"].str.extract(_ZIP_RE, expand=False).astype("string")
+    out["age_midpoint"] = out["age_code"].map(
+        AGE_CODE_TO_MIDPOINT).astype("int8")
+    out["occupation_label"] = out["occupation_code"].map(
+        OCCUPATION_CODE_TO_LABEL).astype("string")
+    out["zip5"] = out["zip"].str.extract(
+        _ZIP_RE, expand=False).astype("string")
     out["is_female"] = (out["gender"] == "F").astype("int8")
     return out[
         [
@@ -66,13 +69,15 @@ def clean_movies_1m(movies: pd.DataFrame) -> pd.DataFrame:
     out = movies.copy()
     year = out["title"].str.extract(_YEAR_RE, expand=False)
     out["year"] = pd.to_numeric(year, errors="coerce").astype("Int16")
-    out["title_clean"] = out["title"].str.replace(_YEAR_RE, "", regex=True).str.strip().astype("string")
+    out["title_clean"] = out["title"].str.replace(
+        _YEAR_RE, "", regex=True).str.strip().astype("string")
     out["genres_list"] = out["genres"].fillna("").apply(
         lambda s: [] if s in ("", "(no genres listed)") else s.split("|")
     )
     out["no_genres"] = out["genres_list"].apply(len).eq(0).astype("int8")
     for g in GENRES_1M:
-        out[f"g_{g}"] = out["genres_list"].apply(lambda lst, gg=g: int(gg in lst)).astype("int8")
+        out[f"g_{g}"] = out["genres_list"].apply(
+            lambda lst, gg=g: int(gg in lst)).astype("int8")
     return out[
         ["movie_id", "title_clean", "year", "genres", "genres_list", "no_genres"]
         + [f"g_{g}" for g in GENRES_1M]

@@ -1,4 +1,4 @@
-== MovieLens-SR-Mixed -- uruchomienie pipeline'u przygotowania danych + KMeans ==
+== MovieLens-SR-Mixed -- uruchomienie pipeline'u przygotowania danych + KMeans + Sentyment ==
 
 WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~875 MB + parquet).
 
@@ -39,6 +39,20 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
    #   data/processed/user_clusters.parquet (user_id -> cluster_id)
    #   log w konsoli z opisem kazdego klastra
 
+7. Klasyfikacja sentymentu tagow (ml-20m)
+   python scripts/06_sentiment.py
+   # Pipeline:
+   #   1. Filtrowanie tagow -- zostawia tylko tagi z przymiotnikami/przyslowkami (NLTK POS)
+   #   2. Etykietowanie -- VADER nadaje etykiety positive/negative (neutralne usuniete)
+   #   3. Trening -- TF-IDF (5000 terms) + Logistic Regression
+   # Wynik:
+   #   models/sentiment_vectorizer.joblib
+   #   models/sentiment_clf.joblib
+   #   log w konsoli z classification report (accuracy, precision, recall, F1)
+   #
+   # Statystyki: 465_541 tagow -> 117_365 po filtrze POS -> 44_272 po usunieciu neutralnych
+   # Wyniki: accuracy=0.99, F1 macro=0.98
+
 == Sprawdzenie poprawnosci wynikow ==
 
 - data/processed/users_1m.parquet      -> 6040 wierszy, brak NaN w kolumnach demograficznych
@@ -49,12 +63,22 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
 - silhouette_score dla wybranego k*    -> > 0.10 (realistyczny prog dla mieszanych cech)
 - models/kmeans.joblib + scaler.joblib -> laduja sie przez joblib.load,
                                           predict na nowym profilu zwraca cluster_id w [0, k*-1]
+- models/sentiment_clf.joblib          -> accuracy=0.99 na zbiorze testowym
+- models/sentiment_vectorizer.joblib   -> TF-IDF, 5000 terms
 
 == Klasyfikacja nowego profilu uzytkownika do klastra (uzycie modelu) ==
 
   import joblib, pandas as pd
   scaler = joblib.load("models/scaler.joblib")
   kmeans = joblib.load("models/kmeans.joblib")
-  feature_cols = joblib.load("models/feature_cols.joblib")  # lista nazw kolumn w tej samej kolejnosci
-  new_profile = pd.DataFrame([{...}])[feature_cols]         # wypelnione zera tam gdzie brak ocen
+  feature_cols = joblib.load("models/feature_cols.joblib")
+  new_profile = pd.DataFrame([{...}])[feature_cols]
   cluster_id = int(kmeans.predict(scaler.transform(new_profile))[0])
+
+== Klasyfikacja sentymentu nowego komentarza (uzycie modelu) ==
+
+  import joblib
+  vectorizer = joblib.load("models/sentiment_vectorizer.joblib")
+  clf = joblib.load("models/sentiment_clf.joblib")
+  sentiment = clf.predict(vectorizer.transform(["absolutely brilliant"]))[0]
+  # zwraca "positive" lub "negative"
