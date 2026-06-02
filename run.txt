@@ -1,4 +1,4 @@
-== MovieLens-SR-Mixed -- uruchomienie pipeline'u przygotowania danych + KMeans + Sentyment ==
+== MovieLens-SR-Mixed -- uruchomienie pipeline'u przygotowania danych + KMeans + Sentyment + Rekomendacje ==
 
 WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~875 MB + parquet).
 
@@ -53,6 +53,25 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
    # Statystyki: 465_541 tagow -> 117_365 po filtrze POS -> 44_272 po usunieciu neutralnych
    # Wyniki: accuracy=0.99, F1 macro=0.98
 
+8. System rekomendacji filmow (collaborative filtering na ml-1m)
+   python scripts/07_recsys.py
+   # Wymaga: data/processed/{train,test,movies_1m}.parquet (powstaja w kroku 3).
+   # Pipeline:
+   #   1. Fituje trzy modele na train.parquet:
+   #      - SVD (scipy.sparse.linalg.svds, k=50 latent factors, mean-centered)
+   #      - ItemKNN-cosine (k=30 sasiadow)
+   #      - ItemKNN-pearson (k=30 sasiadow, similarity na user-mean-centered)
+   #   2. Ewaluuje na test.parquet: RMSE, MAE, Hit-rate@10 (sample 1000 userow, prog like>=4.0)
+   #   3. Zapisuje top-10 dla 5 losowych userow per model
+   # Wynik:
+   #   models/recsys/{svd, item_knn_cosine, item_knn_pearson}.joblib
+   #   models/recsys/{user_index, item_index}.joblib
+   #   reports/recsys/metrics.csv                        (RMSE/MAE/Hit-rate@10 per model)
+   #   reports/recsys/similarity_comparison.csv          (cosine vs pearson side-by-side)
+   #   reports/recsys/top10_examples.csv                 (5 userow x 3 modele x 10 filmow)
+   #   reports/recsys/rating_predictions_scatter.png     (pred vs actual dla najlepszego modelu)
+   #   log w konsoli z porownaniem modeli + przykladowa top-10 listy filmow
+
 == Sprawdzenie poprawnosci wynikow ==
 
 - data/processed/users_1m.parquet      -> 6040 wierszy, brak NaN w kolumnach demograficznych
@@ -65,6 +84,11 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
                                           predict na nowym profilu zwraca cluster_id w [0, k*-1]
 - models/sentiment_clf.joblib          -> accuracy=0.99 na zbiorze testowym
 - models/sentiment_vectorizer.joblib   -> TF-IDF, 5000 terms
+- reports/recsys/metrics.csv           -> 3 wiersze (svd, knn_cosine, knn_pearson),
+                                         RMSE w 0.85-1.05, MAE w 0.65-0.85
+- reports/recsys/similarity_comparison.csv -> cosine vs pearson, jeden zwykle wygrywa min. 1 metryke
+- models/recsys/svd.joblib + item_knn_*.joblib -> laduja sie, top_n_for_user(user_id=1, n=10)
+                                                  zwraca 10 slownikow z movie_id+title+predicted_rating
 
 == Klasyfikacja nowego profilu uzytkownika do klastra (uzycie modelu) ==
 
@@ -82,3 +106,15 @@ WYMAGANIA: Python 3.10+, ok. 2 GB wolnego miejsca na dysku (rozpakowane dane ~87
   clf = joblib.load("models/sentiment_clf.joblib")
   sentiment = clf.predict(vectorizer.transform(["absolutely brilliant"]))[0]
   # zwraca "positive" lub "negative"
+
+== Generowanie rekomendacji dla uzytkownika (uzycie modelu) ==
+
+  from src.recsys.predict import top_n_for_user
+  recs = top_n_for_user(user_id=1, n=10, model_name="svd")
+  # recs = [
+  #   {"movie_id": 1196, "title": "Star Wars: Episode V - The Empire Strikes Back",
+  #    "year": 1980, "predicted_rating": 4.78},
+  #   ...
+  # ]
+  # model_name moze byc: "svd", "knn_cosine", "knn_pearson"
+  # filmy ktore user 1 widzial w trainie sa automatycznie wykluczone

@@ -13,6 +13,9 @@ MODELS_DIR = PROJECT_ROOT / "models"
 MODELS_SENTIMENT_DIR = MODELS_DIR / "sentiment"
 REPORTS_SENTIMENT_DIR = REPORTS_DIR / "sentiment"
 
+MODELS_RECSYS_DIR = MODELS_DIR / "recsys"
+REPORTS_RECSYS_DIR = REPORTS_DIR / "recsys"
+
 ML_1M_DIR = RAW_DIR / "ml-1m"
 ML_20M_DIR = RAW_DIR / "ml-20m"
 
@@ -73,6 +76,12 @@ VADER_POS_THRESHOLD = 0.05
 VADER_NEG_THRESHOLD = -0.05
 SENTIMENT_CLASSES = ("negative", "neutral", "positive")
 
+# Recommender system (iteration 3): hyperparameters shared by SVD and item-KNN models.
+RECSYS_K_FACTORS = 50          # SVD latent factors
+RECSYS_KNN_NEIGHBORS = 30      # item-based KNN neighbours
+RECSYS_TOP_N = 10              # default top-N recommendation length
+RECSYS_LIKE_THRESHOLD = 4.0    # rating threshold for hit-rate@K "relevant" definition
+
 
 def ensure_dirs() -> None:
     for d in (
@@ -82,5 +91,7 @@ def ensure_dirs() -> None:
         MODELS_DIR,
         MODELS_SENTIMENT_DIR,
         REPORTS_SENTIMENT_DIR,
+        MODELS_RECSYS_DIR,
+        REPORTS_RECSYS_DIR,
     ):
         d.mkdir(parents=True, exist_ok=True)
