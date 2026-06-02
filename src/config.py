@@ -10,6 +10,9 @@ PROCESSED_DIR = DATA_DIR / "processed"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 MODELS_DIR = PROJECT_ROOT / "models"
 
+MODELS_SENTIMENT_DIR = MODELS_DIR / "sentiment"
+REPORTS_SENTIMENT_DIR = REPORTS_DIR / "sentiment"
+
 ML_1M_DIR = RAW_DIR / "ml-1m"
 ML_20M_DIR = RAW_DIR / "ml-20m"
 
@@ -65,7 +68,19 @@ OCCUPATION_CODE_TO_LABEL = {
 TRAIN_RATIO = 0.8
 RANDOM_STATE = 42
 
+# Sentiment classification (iteration 2): VADER compound thresholds for weak labels.
+VADER_POS_THRESHOLD = 0.05
+VADER_NEG_THRESHOLD = -0.05
+SENTIMENT_CLASSES = ("negative", "neutral", "positive")
+
 
 def ensure_dirs() -> None:
-    for d in (RAW_DIR, PROCESSED_DIR, REPORTS_DIR, MODELS_DIR):
+    for d in (
+        RAW_DIR,
+        PROCESSED_DIR,
+        REPORTS_DIR,
+        MODELS_DIR,
+        MODELS_SENTIMENT_DIR,
+        REPORTS_SENTIMENT_DIR,
+    ):
         d.mkdir(parents=True, exist_ok=True)
