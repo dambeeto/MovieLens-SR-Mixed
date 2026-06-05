@@ -56,7 +56,7 @@ def fit_kmeans(
     """Fit scaler, sweep k, refit the best model, return everything (no plotting here)."""
     feature_cols = list(features.columns)
     scaler = StandardScaler()
-    X = scaler.fit_transform(features.values)
+    X = scaler.fit_transform(features.values).astype(np.float64)
 
     print(f"[kmeans] sweeping k in {list(k_values)} on shape={X.shape}")
     report = _sweep_k(X, k_values)

@@ -119,7 +119,7 @@ def sentiment(req: SentimentRequest) -> dict[str, Any]:
 def cluster(req: ClusterRequest) -> dict[str, Any]:
     scaler, kmeans, feature_cols = _kmeans_artifacts()
     row = pd.DataFrame([req.features]).reindex(columns=feature_cols, fill_value=0.0)
-    cluster_id = int(kmeans.predict(scaler.transform(row.to_numpy()))[0])
+    cluster_id = int(kmeans.predict(scaler.transform(row.to_numpy().astype("float64")).astype("float64"))[0])
     return {"cluster_id": cluster_id, "n_clusters": int(kmeans.n_clusters)}
 
 

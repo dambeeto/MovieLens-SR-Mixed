@@ -88,8 +88,12 @@
 </head>
 <body>
   <header>
-    <h1>MovieLens-SR-Mixed &mdash; demo aplikacji</h1>
-    <p>System rekomendacji + klasyfikacja sentymentu + profilowanie userow + prognoza popularnosci.</p>
+    <h1 style="font-size: 40px">System do analizowania zbiorów filmowych MovieLens</h1>
+    <br>
+    <h3>Panel użytkownika reprezentujący:</h3>
+      <ul>
+        <li>System rekomendacji</li> <li>klasyfikacja sentymentu</li> <li>Profilowanie userów</li> <li>Prognoza popularności</li>
+      </ul>
     <p class="status" id="health">Sprawdzam dostepne modele&hellip;</p>
   </header>
 
@@ -104,7 +108,7 @@
     <!-- TAB: sentiment -->
     <section class="tab active" id="tab-sentiment">
       <h2>Klasyfikacja sentymentu komentarza</h2>
-      <p class="hint">Wpisz krotki komentarz / opinie. Model TF-IDF + Logistic Regression klasyfikuje jako positive / negative (trening: tagi z MovieLens 20M, etykiety przez VADER po filtrze POS).</p>
+      <p class="hint">Wpisz krótki komentarz lub opinię.</p>
       <textarea id="sentiment-text" placeholder="np. 'this movie was amazing'"></textarea>
       <div class="row" style="margin-top:8px;">
         <button class="primary" onclick="runSentiment()">Klasyfikuj</button>
@@ -115,7 +119,7 @@
     <!-- TAB: recommend -->
     <section class="tab" id="tab-recommend">
       <h2>Top-N rekomendacji dla uzytkownika</h2>
-      <p class="hint">Collaborative filtering na ml-1m. Wybierz model i podaj user_id (1..6040).</p>
+      <p class="hint">Collaborative filtering. Wybierz model i podaj user_id.</p>
       <div class="row">
         <input id="rec-uid" type="number" placeholder="user_id (np. 1)" value="1" min="1" style="width:160px">
         <select id="rec-model">
@@ -133,7 +137,7 @@
     <!-- TAB: forecast -->
     <section class="tab" id="tab-forecast">
       <h2>Prognoza popularnosci gatunku na kolejny kwartal</h2>
-      <p class="hint">Regresja na agregatach (gatunek, kwartal) z ml-20m. Trening na okresie 1995&ndash;ostatnie ~4 kwartaly, prognoza dla nastepnego.</p>
+      <p class="hint">Wybierz gatunek filmowy i przekonaj się jaka będzie prognozowana liczba ocen w następnym kwartale.</p>
       <div class="row">
         <select id="genre-select" style="min-width: 240px">
           <option>(laduje gatunki...)</option>
@@ -147,7 +151,7 @@
     <!-- TAB: cluster -->
     <section class="tab" id="tab-cluster">
       <h2>Przypisanie profilu uzytkownika do klastra</h2>
-      <p class="hint">Podaj kilka cech profilu &mdash; KMeans wskaze grupe. Pola ktorych nie wypelnisz dostana 0.</p>
+      <p class="hint">Podaj kilka cech profilu, a algorytm KMeans wskaże odpowiednią dla profilu grupę. Polom nie wypełnionym przypisana zostanie wartość 0.</p>
       <div id="cluster-form" class="grid"></div>
       <div class="row" style="margin-top: 12px;">
         <button class="primary" onclick="runCluster()">Przypisz do klastra</button>
@@ -304,8 +308,8 @@ async function buildClusterForm() {
     cont.innerHTML = "";
     // Show the most useful (~12) features in the form; rest will be 0 by default.
     const visible = r.feature_cols.filter(c =>
-      c.startsWith("rmean_") || c === "age_midpoint" || c === "is_female"
-    ).slice(0, 12);
+      c.startsWith("rmean_") || c.startsWith("rshare_") || c === "age_midpoint" || c === "is_female" || c.startsWith("occ_")
+    );
     visible.forEach(name => {
       const lbl = document.createElement("label");
       lbl.textContent = name;
@@ -344,10 +348,24 @@ async function runCluster() {
 function randomFillCluster() {
   const inputs = document.querySelectorAll("#cluster-form input");
   inputs.forEach(i => {
-    if (i.dataset.name === "age_midpoint") i.value = (20 + Math.floor(Math.random()*40));
-    else if (i.dataset.name === "is_female") i.value = Math.random() < 0.5 ? 0 : 1;
-    else i.value = (3 + Math.random() * 2).toFixed(2);  // rmean_* in [3, 5]
+    if (i.dataset.name === "age_midpoint") 
+      i.value = (20 + Math.floor(Math.random()*40));
+    else if (i.dataset.name === "is_female") 
+      i.value = Math.random() < 0.5 ? 0 : 1;
+    else if (i.dataset.name.startsWith("rmean_")) 
+      i.value = (3 + Math.random() * 2).toFixed(2);
+    else if (i.dataset.name.startsWith("rshare_")) 
+      i.value = (Math.random() * 0.3).toFixed(3);
+    else if (i.dataset.name.startsWith("occ_")) 
+      i.value = 0;
   });
+  // Set random occupation to 0
+  const occInputs = [...document.querySelectorAll("#cluster-form input")]
+    .filter(i => i.dataset.name.startsWith("occ_"));
+  if (occInputs.length > 0) {
+    const random = occInputs[Math.floor(Math.random() * occInputs.length)];
+    random.value = 1;
+  }
 }
 </script>
 </body>
