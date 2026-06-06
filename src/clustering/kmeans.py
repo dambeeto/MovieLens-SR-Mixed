@@ -51,12 +51,14 @@ def _pick_best_k(report: pd.DataFrame) -> int:
 
 
 def fit_kmeans(
-    features: pd.DataFrame, k_values: range = range(2, 16)
+    features: pd.DataFrame, k_values: range = range(2, 17)
 ) -> ClusteringResult:
     """Fit scaler, sweep k, refit the best model, return everything (no plotting here)."""
     feature_cols = list(features.columns)
     scaler = StandardScaler()
-    X = scaler.fit_transform(features.values)
+    # KMeans in sklearn >= 1.4 requires float64 (Cython kernel) -- our user_features
+    # parquet stores most columns as float32, so cast explicitly.
+    X = scaler.fit_transform(features.values).astype(np.float64, copy=False)
 
     print(f"[kmeans] sweeping k in {list(k_values)} on shape={X.shape}")
     report = _sweep_k(X, k_values)

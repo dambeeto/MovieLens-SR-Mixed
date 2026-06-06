@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <title>MovieLens-SR-Mixed</title>
@@ -88,70 +88,70 @@
 </head>
 <body>
   <header>
-    <h1>MovieLens-SR-Mixed &mdash; demo aplikacji</h1>
-    <p>System rekomendacji + klasyfikacja sentymentu + profilowanie userow + prognoza popularnosci.</p>
-    <p class="status" id="health">Sprawdzam dostepne modele&hellip;</p>
+    <h1>MovieLens-SR-Mixed - app demo</h1>
+    <p>Recommendation system + sentiment classification + user profiling + popularity forecasting.</p>
+    <p class="status" id="health">Checking available models...</p>
   </header>
 
   <nav>
-    <button class="active" data-tab="sentiment">Sentyment komentarza</button>
-    <button data-tab="recommend">Rekomendacje</button>
-    <button data-tab="forecast">Prognoza popularnosci</button>
-    <button data-tab="cluster">Profil &rarr; klaster</button>
+    <button class="active" data-tab="sentiment">Comment sentiment</button>
+    <button data-tab="recommend">Recommendations</button>
+    <button data-tab="forecast">Popularity forecast</button>
+    <button data-tab="cluster">Profile -&gt; cluster</button>
   </nav>
 
   <main>
     <!-- TAB: sentiment -->
     <section class="tab active" id="tab-sentiment">
-      <h2>Klasyfikacja sentymentu komentarza</h2>
-      <p class="hint">Wpisz krotki komentarz / opinie. Model TF-IDF + Logistic Regression klasyfikuje jako positive / negative (trening: tagi z MovieLens 20M, etykiety przez VADER po filtrze POS).</p>
-      <textarea id="sentiment-text" placeholder="np. 'this movie was amazing'"></textarea>
+      <h2>Comment sentiment classification</h2>
+      <p class="hint">Type a short comment or opinion. A TF-IDF + Logistic Regression model classifies it as positive or negative (trained on MovieLens 20M tags, labels from VADER after a POS filter).</p>
+      <textarea id="sentiment-text" placeholder="e.g. 'this movie was amazing'"></textarea>
       <div class="row" style="margin-top:8px;">
-        <button class="primary" onclick="runSentiment()">Klasyfikuj</button>
+        <button class="primary" onclick="runSentiment()">Classify</button>
       </div>
       <div class="result" id="sentiment-result" style="display:none"></div>
     </section>
 
     <!-- TAB: recommend -->
     <section class="tab" id="tab-recommend">
-      <h2>Top-N rekomendacji dla uzytkownika</h2>
-      <p class="hint">Collaborative filtering na ml-1m. Wybierz model i podaj user_id (1..6040).</p>
+      <h2>Top-N recommendations for a user</h2>
+      <p class="hint">Collaborative filtering on ml-1m. Pick a model and a user_id (1..6040).</p>
       <div class="row">
-        <input id="rec-uid" type="number" placeholder="user_id (np. 1)" value="1" min="1" style="width:160px">
+        <input id="rec-uid" type="number" placeholder="user_id (e.g. 1)" value="1" min="1" style="width:160px">
         <select id="rec-model">
           <option value="svd">SVD (k=50)</option>
           <option value="knn_cosine">Item-KNN cosine</option>
           <option value="knn_pearson">Item-KNN pearson</option>
         </select>
         <input id="rec-n" type="number" value="10" min="1" max="50" style="width:90px">
-        <button class="primary" onclick="runRecommend()">Polec mi 10 filmow</button>
-        <button onclick="loadSampleUsers()">Przykladowe ID</button>
+        <button class="primary" onclick="runRecommend()">Recommend</button>
+        <button onclick="loadSampleUsers()">Sample user IDs</button>
       </div>
       <div class="result" id="rec-result" style="display:none"></div>
     </section>
 
     <!-- TAB: forecast -->
     <section class="tab" id="tab-forecast">
-      <h2>Prognoza popularnosci gatunku na kolejny kwartal</h2>
-      <p class="hint">Regresja na agregatach (gatunek, kwartal) z ml-20m. Trening na okresie 1995&ndash;ostatnie ~4 kwartaly, prognoza dla nastepnego.</p>
+      <h2>Genre popularity forecast for the next quarter</h2>
+      <p class="hint">Regression on (genre, quarter) aggregates from ml-20m. Trained on data up to the last ~4 quarters, forecasting the next one.</p>
       <div class="row">
         <select id="genre-select" style="min-width: 240px">
-          <option>(laduje gatunki...)</option>
+          <option>(loading genres...)</option>
         </select>
-        <button class="primary" onclick="runForecast()">Prognozuj</button>
-        <button onclick="forecastAll()">Pokaz wszystkie</button>
+        <button class="primary" onclick="runForecast()">Forecast</button>
+        <button onclick="forecastAll()">Show all</button>
       </div>
       <div class="result" id="fc-result" style="display:none"></div>
     </section>
 
     <!-- TAB: cluster -->
     <section class="tab" id="tab-cluster">
-      <h2>Przypisanie profilu uzytkownika do klastra</h2>
-      <p class="hint">Podaj kilka cech profilu &mdash; KMeans wskaze grupe. Pola ktorych nie wypelnisz dostana 0.</p>
+      <h2>Assign a user profile to a cluster</h2>
+      <p class="hint">Fill in a few profile features - KMeans will pick the matching group. Any field you leave blank defaults to 0.</p>
       <div id="cluster-form" class="grid"></div>
       <div class="row" style="margin-top: 12px;">
-        <button class="primary" onclick="runCluster()">Przypisz do klastra</button>
-        <button onclick="randomFillCluster()">Losowy profil</button>
+        <button class="primary" onclick="runCluster()">Assign cluster</button>
+        <button onclick="randomFillCluster()">Random profile</button>
       </div>
       <div class="result" id="cluster-result" style="display:none"></div>
     </section>
@@ -199,9 +199,9 @@ function renderTable(rows, columns) {
 // ----- Health bar -----
 fetch("/api/health").then(jsonOrError).then(d => {
   const parts = Object.entries(d.ready).map(([k, v]) =>
-    `<span class="${v ? "ok" : "miss"}">${k}: ${v ? "OK" : "BRAK"}</span>`);
+    `<span class="${v ? "ok" : "miss"}">${k}: ${v ? "OK" : "MISSING"}</span>`);
   $("health").innerHTML = parts.join(" &nbsp;|&nbsp; ");
-}).catch(() => { $("health").textContent = "API nieosiagalne"; });
+}).catch(() => { $("health").textContent = "API unreachable"; });
 
 // ----- Sentiment -----
 async function runSentiment() {
@@ -217,7 +217,7 @@ async function runSentiment() {
       <span class="badge ${r.label}">${r.label}</span>
     </div>`;
     if (r.probabilities) {
-      html += "<table><tr><th>klasa</th><th>prawdopodobienstwo</th></tr>";
+      html += "<table><tr><th>class</th><th>probability</th></tr>";
       for (const [k, v] of Object.entries(r.probabilities)) {
         html += `<tr><td>${k}</td><td>${(v*100).toFixed(1)}%</td></tr>`;
       }
@@ -235,7 +235,7 @@ async function runRecommend() {
   const n = $("rec-n").value || 10;
   try {
     const r = await fetch(`/api/recommend/${uid}?n=${n}&model=${model}`).then(jsonOrError);
-    let html = `<p class="hint">user_id=${r.user_id} &middot; model=${r.model}</p>`;
+    let html = `<p class="hint">user_id=${r.user_id} | model=${r.model}</p>`;
     html += renderTable(
       r.recommendations.map((x, i) => ({...x, rank: i+1, predicted_rating: x.predicted_rating.toFixed(2)})),
       ["rank", "movie_id", "title", "year", "predicted_rating"]
@@ -264,18 +264,18 @@ async function refreshGenres() {
       sel.appendChild(opt);
     });
   } catch (e) {
-    $("genre-select").innerHTML = "<option>brak modelu popularnosci</option>";
+    $("genre-select").innerHTML = "<option>popularity model missing</option>";
   }
 }
 refreshGenres();
 
 async function runForecast() {
   const g = $("genre-select").value;
-  if (!g || g.startsWith("brak")) return;
+  if (!g || g.startsWith("popularity model")) return;
   try {
     const r = await fetch(`/api/forecast/${encodeURIComponent(g)}`).then(jsonOrError);
-    let html = `<p class="hint">Model: ${r.based_on_model} &middot; horyzont: ${r.next_period}</p>`;
-    html += `<div style="font-size:24px;font-weight:600">${r.genre}: <span style="color:var(--accent)">${r.predicted_n_ratings.toLocaleString()}</span> ocen</div>`;
+    let html = `<p class="hint">Model: ${r.based_on_model} | horizon: ${r.next_period}</p>`;
+    html += `<div style="font-size:24px;font-weight:600">${r.genre}: <span style="color:var(--accent)">${r.predicted_n_ratings.toLocaleString()}</span> ratings</div>`;
     html += `<p class="hint">log1p(predicted) = ${r.predicted_log}</p>`;
     $("fc-result").style.display = "block";
     $("fc-result").innerHTML = html;
@@ -302,16 +302,24 @@ async function buildClusterForm() {
     const r = await fetch("/api/cluster/template").then(jsonOrError);
     const cont = $("cluster-form");
     cont.innerHTML = "";
-    // Show the most useful (~12) features in the form; rest will be 0 by default.
-    const visible = r.feature_cols.filter(c =>
-      c.startsWith("rmean_") || c === "age_midpoint" || c === "is_female"
-    ).slice(0, 12);
-    visible.forEach(name => {
+    // Render every feature the KMeans model expects. Blank fields default to 0.
+    r.feature_cols.forEach(name => {
       const lbl = document.createElement("label");
-      lbl.textContent = name;
+      let display = name;
+      if (name.startsWith("rmean_")) display = name.slice(6) + " - mean rating";
+      else if (name.startsWith("rshare_")) display = name.slice(7) + " - rating share";
+      else if (name.startsWith("occ_")) display = "Occupation: " + name.slice(4);
+      else if (name === "age_midpoint") display = "Age (midpoint of bucket)";
+      else if (name === "is_female") display = "Female (1 = yes, 0 = no)";
+      lbl.textContent = display;
       const inp = document.createElement("input");
-      inp.type = "number"; inp.step = "0.01"; inp.value = ""; inp.dataset.name = name;
-      inp.placeholder = "0";
+      inp.type = "number"; inp.value = ""; inp.dataset.name = name;
+      if (name.startsWith("rmean_")) { inp.step = "0.1"; inp.min = "0.5"; inp.max = "5"; inp.placeholder = "0.5 - 5.0"; }
+      else if (name.startsWith("rshare_")) { inp.step = "0.01"; inp.min = "0"; inp.max = "1"; inp.placeholder = "0.0 - 1.0"; }
+      else if (name.startsWith("occ_")) { inp.step = "1"; inp.min = "0"; inp.max = "1"; inp.placeholder = "0 or 1"; }
+      else if (name === "age_midpoint") { inp.step = "1"; inp.min = "0"; inp.max = "99"; inp.placeholder = "e.g. 28"; }
+      else if (name === "is_female") { inp.step = "1"; inp.min = "0"; inp.max = "1"; inp.placeholder = "0 or 1"; }
+      else { inp.step = "0.01"; inp.placeholder = "0"; }
       lbl.appendChild(inp);
       cont.appendChild(lbl);
     });
@@ -334,19 +342,34 @@ async function runCluster() {
       headers: {"Content-Type": "application/json"},
       body: JSON.stringify({features})
     }).then(jsonOrError);
+    // KMeans labels are 0-based internally; show 1-based to the user.
+    const display = r.cluster_id + 1;
     $("cluster-result").style.display = "block";
-    $("cluster-result").innerHTML = `<div style="font-size:24px;font-weight:600">Klaster <span style="color:var(--accent)">${r.cluster_id}</span> z ${r.n_clusters}</div>
-      <p class="hint">Profil zostal znormalizowany przez wczesniej dopasowany StandardScaler i przypisany przez KMeans.</p>
+    $("cluster-result").innerHTML = `<div style="font-size:24px;font-weight:600">Cluster <span style="color:var(--accent)">${display}</span> of ${r.n_clusters}</div>
+      <p class="hint">The profile was standardised with the previously fitted StandardScaler and assigned by KMeans.</p>
       <pre>${JSON.stringify(features, null, 2)}</pre>`;
   } catch (e) { show("cluster-result", {error: e.message}); }
 }
 
 function randomFillCluster() {
-  const inputs = document.querySelectorAll("#cluster-form input");
+  const inputs = Array.from(document.querySelectorAll("#cluster-form input"));
+  // Pick one occupation at random; everything else gets 0.
+  const occInputs = inputs.filter(i => i.dataset.name.startsWith("occ_"));
+  const chosenOccIdx = Math.floor(Math.random() * occInputs.length);
+  // Rating shares: sample a Dirichlet-ish profile so they roughly sum to 1.
+  const rshareInputs = inputs.filter(i => i.dataset.name.startsWith("rshare_"));
+  const raw = rshareInputs.map(() => Math.random());
+  const total = raw.reduce((a, b) => a + b, 0) || 1;
+  const shares = raw.map(x => x / total);
+  let sIdx = 0;
   inputs.forEach(i => {
-    if (i.dataset.name === "age_midpoint") i.value = (20 + Math.floor(Math.random()*40));
-    else if (i.dataset.name === "is_female") i.value = Math.random() < 0.5 ? 0 : 1;
-    else i.value = (3 + Math.random() * 2).toFixed(2);  // rmean_* in [3, 5]
+    const name = i.dataset.name;
+    if (name === "age_midpoint") i.value = 20 + Math.floor(Math.random() * 40);
+    else if (name === "is_female") i.value = Math.random() < 0.5 ? 0 : 1;
+    else if (name.startsWith("rmean_")) i.value = (2.5 + Math.random() * 2.5).toFixed(2);  // [2.5, 5.0]
+    else if (name.startsWith("rshare_")) { i.value = shares[sIdx].toFixed(3); sIdx++; }
+    else if (name.startsWith("occ_")) i.value = occInputs.indexOf(i) === chosenOccIdx ? 1 : 0;
+    else i.value = 0;
   });
 }
 </script>

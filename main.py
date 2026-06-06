@@ -16,6 +16,19 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+# Pre-import sklearn estimators that may be present in persisted joblib files.
+# Without this, the first lazy joblib.load() inside an endpoint can race with
+# sklearn's own (re)initialization under uvicorn --reload and surface as:
+#   ImportError: cannot import name 'clone' from partially initialized module 'sklearn.base'
+# Importing them once at module load time forces full initialisation up front.
+import sklearn.base  # noqa: F401
+from sklearn.cluster import KMeans  # noqa: F401
+from sklearn.preprocessing import StandardScaler  # noqa: F401
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge  # noqa: F401
+from sklearn.ensemble import IsolationForest, RandomForestRegressor  # noqa: F401
+from sklearn.feature_extraction.text import TfidfVectorizer  # noqa: F401
+from sklearn.pipeline import FeatureUnion, Pipeline  # noqa: F401
+
 import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException
@@ -117,9 +130,13 @@ def sentiment(req: SentimentRequest) -> dict[str, Any]:
 
 @app.post("/api/cluster")
 def cluster(req: ClusterRequest) -> dict[str, Any]:
+    import numpy as np
+
     scaler, kmeans, feature_cols = _kmeans_artifacts()
     row = pd.DataFrame([req.features]).reindex(columns=feature_cols, fill_value=0.0)
-    cluster_id = int(kmeans.predict(scaler.transform(row.to_numpy()))[0])
+    # sklearn>=1.4 KMeans.predict needs float64; the scaler returns float32 when input is float32.
+    Xs = scaler.transform(row.to_numpy(dtype=np.float64))
+    cluster_id = int(kmeans.predict(Xs.astype(np.float64, copy=False))[0])
     return {"cluster_id": cluster_id, "n_clusters": int(kmeans.n_clusters)}
 
 
