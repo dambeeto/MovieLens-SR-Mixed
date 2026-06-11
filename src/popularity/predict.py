@@ -53,16 +53,21 @@ def forecast_next_quarter(genre: str) -> dict:
         raise KeyError(f"genre {genre!r} not in history; known: {sorted(history['genre'].unique())}")
     history_g = history[history["genre"] == genre].sort_values("period").reset_index(drop=True)
     last_period = history_g["period"].iloc[-1]
+    last_n = int(history_g["n_ratings"].iloc[-1])
     next_period = (last_period + pd.tseries.offsets.QuarterEnd()).normalize()
     row = _build_next_row(history_g, next_period, state["meta"]["first_year"])
     X = np.array([[row[c] for c in feature_columns()]])
     pred_log = float(state["model"].predict(X)[0])
-    pred_n = float(max(np.expm1(pred_log), 0.0))
+    pred_n = int(round(max(np.expm1(pred_log), 0.0)))
+    trend_pct = round((pred_n - last_n) / last_n * 100, 1) if last_n else None
     return {
         "genre": genre,
         "next_period": next_period.date().isoformat(),
         "predicted_log": round(pred_log, 4),
-        "predicted_n_ratings": int(round(pred_n)),
+        "predicted_n_ratings": pred_n,
+        "last_period": last_period.date().isoformat(),
+        "last_quarter_n_ratings": last_n,
+        "trend_pct": trend_pct,
         "based_on_model": state["meta"].get("model_name", "?"),
     }
 

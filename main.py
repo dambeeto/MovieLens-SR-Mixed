@@ -4,7 +4,9 @@ Endpoints:
   GET  /                        -> single-page demo UI (static/index.html)
   POST /api/sentiment           -> classify a free-text comment as positive/negative
   POST /api/cluster             -> assign a user profile vector to a KMeans cluster
-  GET  /api/recommend/{uid}     -> top-N CF recommendations for an existing user
+  GET  /api/cluster/profile/{id}   -> readable description of a cluster
+  GET  /api/cluster/recommend/{id} -> cold-start picks for a cluster's profile
+  GET  /api/recommend/{uid}     -> top-N CF recommendations (+ user profile, cold-start fallback)
   GET  /api/forecast/{genre}    -> next-quarter popularity forecast for a genre
   GET  /api/genres              -> list of genres available in the popularity model
   GET  /api/health              -> readiness flags for each artefact
@@ -117,8 +119,13 @@ def sentiment(req: SentimentRequest) -> dict[str, Any]:
             label = str(clf.predict(X)[0])
             payload: dict[str, Any] = {"text": req.text, "label": label}
             if hasattr(clf, "predict_proba"):
-                probs = clf.predict_proba(X)[0]
-                payload["probabilities"] = {str(c): float(p) for c, p in zip(clf.classes_, probs)}
+                try:
+                    probs = clf.predict_proba(X)[0]
+                    payload["probabilities"] = {str(c): float(p) for c, p in zip(clf.classes_, probs)}
+                except Exception:
+                    # A model pickled with a different sklearn can fail predict_proba (version
+                    # skew) while predict() still works; return the label without probabilities.
+                    pass
             return payload
         # Fallback to the iteration-2 pipeline interface (Pipeline + label_classes in models/sentiment/).
         from src.sentiment.predict import predict_sentiment
@@ -140,13 +147,45 @@ def cluster(req: ClusterRequest) -> dict[str, Any]:
     return {"cluster_id": cluster_id, "n_clusters": int(kmeans.n_clusters)}
 
 
+@app.get("/api/cluster/profile/{cluster_id}")
+def cluster_profile(cluster_id: int) -> dict[str, Any]:
+    """Readable description of a KMeans cluster (from reports/cluster_profiles.csv)."""
+    try:
+        from src.profiles import get_cluster_profile
+
+        prof = get_cluster_profile(cluster_id)
+        if prof is None:
+            raise HTTPException(status_code=404, detail=f"cluster {cluster_id} not found")
+        return prof
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/api/cluster/recommend/{cluster_id}")
+def cluster_recommend(cluster_id: int, n: int = 10) -> dict[str, Any]:
+    """Cold-start picks for a brand-new profile: top movies among that cluster's members."""
+    try:
+        from src.recsys.cold_start import recommend_for_cluster
+
+        return {"cluster_id": cluster_id, "recommendations": recommend_for_cluster(cluster_id, n)}
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.get("/api/recommend/{user_id}")
 def recommend(user_id: int, n: int = 10, model: str = "svd") -> dict[str, Any]:
     try:
+        from src.profiles import get_user_profile
+        from src.recsys.cold_start import popular_top_n
         from src.recsys.predict import top_n_for_user
 
         recs = top_n_for_user(user_id=user_id, n=n, model_name=model)
-        return {"user_id": user_id, "model": model, "n": n, "recommendations": recs}
+        base = {"user_id": user_id, "model": model, "n": n}
+        if not recs:
+            # Unknown user (cold start): serve popular picks instead of an empty table.
+            return {**base, "found": False, "fallback": "popular", "profile": None,
+                    "recommendations": popular_top_n(n)}
+        return {**base, "found": True, "profile": get_user_profile(user_id), "recommendations": recs}
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
@@ -189,6 +228,12 @@ def sample_users(n: int = 8) -> dict[str, Any]:
 
 @app.get("/api/cluster/template")
 def cluster_template() -> dict[str, Any]:
-    """Return the list of feature names expected by /api/cluster so the UI can build the form."""
-    _, _, feature_cols = _kmeans_artifacts()
-    return {"feature_cols": list(feature_cols)}
+    """Feature names + per-feature training means (StandardScaler.mean_) for the UI form.
+
+    The means let the UI seed unselected genre features with a neutral baseline instead of 0,
+    so a sparse profile is not read as "rated almost nothing" (which collapsed every profile
+    into the low-activity cluster).
+    """
+    scaler, _, feature_cols = _kmeans_artifacts()
+    baseline = {c: float(m) for c, m in zip(feature_cols, scaler.mean_)}
+    return {"feature_cols": list(feature_cols), "baseline": baseline}

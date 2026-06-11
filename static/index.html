@@ -8,6 +8,7 @@
     :root {
       --bg: #0f1419;
       --panel: #1a2230;
+      --panel-2: #212c3d;
       --border: #2c3a4e;
       --text: #e8ecf1;
       --muted: #8a9bb0;
@@ -35,6 +36,7 @@
       padding: 0 32px;
       border-bottom: 1px solid var(--border);
       background: var(--panel);
+      flex-wrap: wrap;
     }
     nav button {
       background: none; border: none; color: var(--muted);
@@ -48,8 +50,10 @@
     .tab.active { display: block; }
     h2 { font-size: 18px; margin: 0 0 12px; }
     p.hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+    label.field { display: block; font-size: 13px; color: var(--muted); margin: 0 0 14px; }
+    label.field span.q { display: block; color: var(--text); font-size: 14px; margin-bottom: 6px; }
     .row { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
-    input, select, textarea, button.primary {
+    input, select, textarea, button.primary, button.ghost {
       background: var(--panel);
       color: var(--text);
       border: 1px solid var(--border);
@@ -64,6 +68,8 @@
       cursor: pointer; font-weight: 600;
     }
     button.primary:hover { background: var(--accent-hi); }
+    button.ghost { cursor: pointer; }
+    button.ghost:hover { color: var(--text); border-color: var(--accent); }
     .result {
       margin-top: 20px;
       background: var(--panel);
@@ -78,18 +84,58 @@
     .badge { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
     .badge.positive, .badge.up { background: rgba(108, 208, 122, 0.15); color: var(--good); }
     .badge.negative, .badge.down { background: rgba(243, 114, 114, 0.15); color: var(--bad); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-    .grid label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); }
-    .grid input { margin-top: 4px; }
+    .note { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+    .err { color: var(--bad); font-size: 13px; }
     .status { font-size: 12px; color: var(--muted); margin-top: 8px; }
     .status .ok { color: var(--good); }
     .status .miss { color: var(--bad); }
+
+    /* Profile card (recommendations) */
+    .profile-card {
+      background: var(--panel-2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 14px 16px; margin-bottom: 16px;
+    }
+    .profile-card .who { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .profile-card .who .sep { color: var(--muted); font-weight: 400; margin: 0 8px; }
+    .profile-card .grow { display: flex; gap: 8px; font-size: 13px; margin-top: 4px; }
+    .profile-card .grow .k { color: var(--muted); min-width: 110px; }
+    .profile-card .grow .v { color: var(--text); }
+
+    /* Forecast card */
+    .fc-title { font-size: 18px; font-weight: 600; margin-bottom: 14px; }
+    .fc-title .muted { color: var(--muted); font-weight: 400; }
+    .fc-rows .fcrow {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .fc-rows .fcrow:last-child { border-bottom: none; }
+    .fc-rows .fcrow .lab { color: var(--muted); font-size: 13px; }
+    .fc-rows .fcrow .big { font-size: 20px; font-weight: 600; }
+
+    /* Cluster question form */
+    .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .toggle button {
+      background: var(--panel); color: var(--muted); border: none;
+      padding: 10px 18px; cursor: pointer; font-size: 14px;
+    }
+    .toggle button.active { background: var(--accent); color: #0f1419; font-weight: 600; }
+    .genre-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 18px; }
+    .genre-row { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+    .genre-row label.pick { display: flex; align-items: center; gap: 7px; min-width: 130px; color: var(--text); font-size: 13px; cursor: pointer; }
+    .genre-row .slider-wrap { display: flex; align-items: center; gap: 8px; flex: 1; }
+    .genre-row input[type=range] { flex: 1; accent-color: var(--accent); }
+    .genre-row .sval { color: var(--accent); font-size: 13px; min-width: 26px; text-align: right; }
+    .cluster-desc { margin-bottom: 16px; }
+    .cluster-desc .headline { font-size: 22px; font-weight: 600; margin-bottom: 10px; }
+    .cluster-desc .headline .accent { color: var(--accent); }
+    .cluster-desc .grow { display: flex; gap: 8px; font-size: 13px; margin-top: 4px; }
+    .cluster-desc .grow .k { color: var(--muted); min-width: 120px; }
   </style>
 </head>
 <body>
   <header>
-    <h1>MovieLens-SR-Mixed - app demo</h1>
-    <p>Recommendation system + sentiment classification + user profiling + popularity forecasting.</p>
+    <h1>MovieLens demo</h1>
+    <p>Movie recommendations, comment sentiment, viewer groups and popularity trends.</p>
     <p class="status" id="health">Checking available models...</p>
   </header>
 
@@ -97,14 +143,14 @@
     <button class="active" data-tab="sentiment">Comment sentiment</button>
     <button data-tab="recommend">Recommendations</button>
     <button data-tab="forecast">Popularity forecast</button>
-    <button data-tab="cluster">Profile -&gt; cluster</button>
+    <button data-tab="cluster">Find your group</button>
   </nav>
 
   <main>
     <!-- TAB: sentiment -->
     <section class="tab active" id="tab-sentiment">
-      <h2>Comment sentiment classification</h2>
-      <p class="hint">Type a short comment or opinion. A TF-IDF + Logistic Regression model classifies it as positive or negative (trained on MovieLens 20M tags, labels from VADER after a POS filter).</p>
+      <h2>Comment sentiment</h2>
+      <p class="hint">Type a short opinion in English - best results with 1-4 descriptive words (e.g. 'absolutely brilliant', 'boring film').</p>
       <textarea id="sentiment-text" placeholder="e.g. 'this movie was amazing'"></textarea>
       <div class="row" style="margin-top:8px;">
         <button class="primary" onclick="runSentiment()">Classify</button>
@@ -114,44 +160,97 @@
 
     <!-- TAB: recommend -->
     <section class="tab" id="tab-recommend">
-      <h2>Top-N recommendations for a user</h2>
-      <p class="hint">Collaborative filtering on ml-1m. Pick a model and a user_id (1..6040).</p>
+      <h2>Movie recommendations</h2>
+      <p class="hint">Enter a user and choose which algorithm generates the suggestions.</p>
       <div class="row">
-        <input id="rec-uid" type="number" placeholder="user_id (e.g. 1)" value="1" min="1" style="width:160px">
-        <select id="rec-model">
-          <option value="svd">SVD (k=50)</option>
-          <option value="knn_cosine">Item-KNN cosine</option>
-          <option value="knn_pearson">Item-KNN pearson</option>
+        <input id="rec-uid" type="number" placeholder="user (e.g. 1000)" value="1000" min="1" style="width:170px">
+        <select id="rec-model" title="Recommendation algorithm" aria-label="Recommendation algorithm">
+          <option value="svd">SVD (matrix factorization)</option>
+          <option value="knn_cosine">Item-based KNN (cosine)</option>
+          <option value="knn_pearson">Item-based KNN (Pearson)</option>
         </select>
         <input id="rec-n" type="number" value="10" min="1" max="50" style="width:90px">
         <button class="primary" onclick="runRecommend()">Recommend</button>
-        <button onclick="loadSampleUsers()">Sample user IDs</button>
+        <button class="ghost" onclick="loadSampleUsers()">Sample user IDs</button>
       </div>
       <div class="result" id="rec-result" style="display:none"></div>
     </section>
 
     <!-- TAB: forecast -->
     <section class="tab" id="tab-forecast">
-      <h2>Genre popularity forecast for the next quarter</h2>
-      <p class="hint">Regression on (genre, quarter) aggregates from ml-20m. Trained on data up to the last ~4 quarters, forecasting the next one.</p>
+      <h2>Genre popularity next quarter</h2>
+      <p class="hint">Select a genre to see the predicted number of ratings in the next quarter, based on historical trends.</p>
       <div class="row">
         <select id="genre-select" style="min-width: 240px">
           <option>(loading genres...)</option>
         </select>
         <button class="primary" onclick="runForecast()">Forecast</button>
-        <button onclick="forecastAll()">Show all</button>
+        <button class="ghost" onclick="forecastAll()">Show all</button>
       </div>
       <div class="result" id="fc-result" style="display:none"></div>
     </section>
 
     <!-- TAB: cluster -->
     <section class="tab" id="tab-cluster">
-      <h2>Assign a user profile to a cluster</h2>
-      <p class="hint">Fill in a few profile features - KMeans will pick the matching group. Any field you leave blank defaults to 0.</p>
-      <div id="cluster-form" class="grid"></div>
-      <div class="row" style="margin-top: 12px;">
-        <button class="primary" onclick="runCluster()">Assign cluster</button>
-        <button onclick="randomFillCluster()">Random profile</button>
+      <h2>Find your viewer group</h2>
+      <p class="hint">Answer a few questions and we'll find the group of users most similar to you.</p>
+
+      <label class="field">
+        <span class="q">How old are you?</span>
+        <select id="cl-age">
+          <option value="15">Under 18</option>
+          <option value="21">18-24</option>
+          <option value="30" selected>25-34</option>
+          <option value="40">35-44</option>
+          <option value="47">45-49</option>
+          <option value="53">50-55</option>
+          <option value="60">56+</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="q">What's your gender?</span>
+        <span class="toggle" id="cl-gender">
+          <button type="button" data-val="0" class="active">Male</button>
+          <button type="button" data-val="1">Female</button>
+        </span>
+      </label>
+
+      <label class="field">
+        <span class="q">What's your occupation?</span>
+        <select id="cl-occ">
+          <option>academic/educator</option>
+          <option>artist</option>
+          <option>clerical/admin</option>
+          <option selected>college/grad student</option>
+          <option>customer service</option>
+          <option>doctor/health care</option>
+          <option>executive/managerial</option>
+          <option>farmer</option>
+          <option>homemaker</option>
+          <option>K-12 student</option>
+          <option>lawyer</option>
+          <option>other</option>
+          <option>programmer</option>
+          <option>retired</option>
+          <option>sales/marketing</option>
+          <option>scientist</option>
+          <option>self-employed</option>
+          <option>technician/engineer</option>
+          <option>tradesman/craftsman</option>
+          <option>unemployed</option>
+          <option>writer</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="q">Which genres do you enjoy? Tick the ones you like and rate them (as many as you want).</span>
+      </label>
+      <div id="cl-genres" class="genre-list"></div>
+
+      <div class="row" style="margin-top: 16px;">
+        <button class="primary" onclick="runCluster()">Find my group</button>
+        <button class="ghost" onclick="randomFillCluster()">Random profile</button>
       </div>
       <div class="result" id="cluster-result" style="display:none"></div>
     </section>
@@ -159,6 +258,9 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+const GENRES = ["Action","Adventure","Animation","Children's","Comedy","Crime","Documentary",
+  "Drama","Fantasy","Film-Noir","Horror","Musical","Mystery","Romance","Sci-Fi","Thriller","War","Western"];
+let CLUSTER_BASELINE = {};   // per-feature training means; seeds unselected genres with a neutral value
 
 document.querySelectorAll("nav button").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -172,25 +274,34 @@ document.querySelectorAll("nav button").forEach(btn => {
 
 async function jsonOrError(resp) {
   if (!resp.ok) {
-    const t = await resp.text();
-    throw new Error("HTTP " + resp.status + ": " + t);
+    let detail = "";
+    try { const j = await resp.json(); detail = j.detail || JSON.stringify(j); }
+    catch (e) { detail = await resp.text(); }
+    throw new Error(detail || ("HTTP " + resp.status));
   }
   return resp.json();
 }
 
-function show(target, payload) {
-  const el = $(target);
-  el.style.display = "block";
-  el.innerHTML = "<pre>" + JSON.stringify(payload, null, 2) + "</pre>";
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+}
+
+function showError(target, msg) {
+  $(target).style.display = "block";
+  $(target).innerHTML = '<p class="err">' + escapeHtml(msg) + "</p>";
 }
 
 function renderTable(rows, columns) {
   let html = "<table><thead><tr>";
-  columns.forEach(c => html += "<th>" + c + "</th>");
+  columns.forEach(c => html += "<th>" + c.label + "</th>");
   html += "</tr></thead><tbody>";
   rows.forEach(r => {
     html += "<tr>";
-    columns.forEach(c => html += "<td>" + (r[c] === null || r[c] === undefined ? "" : r[c]) + "</td>");
+    columns.forEach(c => {
+      const v = r[c.key];
+      html += "<td>" + (v === null || v === undefined ? "" : escapeHtml(v)) + "</td>";
+    });
     html += "</tr>";
   });
   return html + "</tbody></table>";
@@ -214,45 +325,82 @@ async function runSentiment() {
       body: JSON.stringify({text})
     }).then(jsonOrError);
     let html = `<div style="font-size:18px;font-weight:600;margin-bottom:8px">
-      <span class="badge ${r.label}">${r.label}</span>
+      <span class="badge ${escapeHtml(r.label)}">${escapeHtml(r.label)}</span>
     </div>`;
     if (r.probabilities) {
-      html += "<table><tr><th>class</th><th>probability</th></tr>";
+      html += "<table><thead><tr><th>label</th><th>confidence</th></tr></thead><tbody>";
       for (const [k, v] of Object.entries(r.probabilities)) {
-        html += `<tr><td>${k}</td><td>${(v*100).toFixed(1)}%</td></tr>`;
+        html += `<tr><td>${escapeHtml(k)}</td><td>${(v*100).toFixed(1)}%</td></tr>`;
       }
-      html += "</table>";
+      html += "</tbody></table>";
     }
     $("sentiment-result").style.display = "block";
     $("sentiment-result").innerHTML = html;
-  } catch (e) { show("sentiment-result", {error: e.message}); }
+  } catch (e) { showError("sentiment-result", e.message); }
 }
 
 // ----- Recommend -----
+function genreLine(list) { return list && list.length ? list.join("  ·  ") : "n/a"; }
+
+function profileCard(p) {
+  let html = `<div class="profile-card">
+    <div class="who">User #${p.user_id}<span class="sep">|</span>${escapeHtml(p.gender)}<span class="sep">|</span>Age ${escapeHtml(p.age)}<span class="sep">|</span>${escapeHtml(p.occupation)}</div>`;
+  if (p.top_watched && p.top_watched.length)
+    html += `<div class="grow"><span class="k">Most watched</span><span class="v">${escapeHtml(genreLine(p.top_watched))}</span></div>`;
+  if (p.top_rated && p.top_rated.length)
+    html += `<div class="grow"><span class="k">Highest rated</span><span class="v">${escapeHtml(genreLine(p.top_rated))}</span></div>`;
+  return html + "</div>";
+}
+
+function recTable(recs) {
+  const rows = recs.map((x, i) => ({
+    rank: i + 1, title: x.title, year: x.year,
+    predicted_rating: Number(x.predicted_rating).toFixed(2)
+  }));
+  return renderTable(rows, [
+    {key: "rank", label: "#"}, {key: "title", label: "title"},
+    {key: "year", label: "year"}, {key: "predicted_rating", label: "predicted rating"}
+  ]);
+}
+
 async function runRecommend() {
   const uid = $("rec-uid").value;
   const model = $("rec-model").value;
   const n = $("rec-n").value || 10;
+  if (!uid) return;
   try {
     const r = await fetch(`/api/recommend/${uid}?n=${n}&model=${model}`).then(jsonOrError);
-    let html = `<p class="hint">user_id=${r.user_id} | model=${r.model}</p>`;
-    html += renderTable(
-      r.recommendations.map((x, i) => ({...x, rank: i+1, predicted_rating: x.predicted_rating.toFixed(2)})),
-      ["rank", "movie_id", "title", "year", "predicted_rating"]
-    );
+    let html = "";
+    if (r.found === false) {
+      html += `<p class="note">This user is new - here are popular picks to get started:</p>`;
+      html += recTable(r.recommendations);
+      html += `<p class="note" style="margin-top:12px">Tip: use 'Sample user IDs' for a user with a full profile.</p>`;
+    } else {
+      if (r.profile) html += profileCard(r.profile);
+      html += recTable(r.recommendations);
+    }
     $("rec-result").style.display = "block";
     $("rec-result").innerHTML = html;
-  } catch (e) { show("rec-result", {error: e.message}); }
+  } catch (e) { showError("rec-result", e.message); }
 }
 
 async function loadSampleUsers() {
   try {
     const r = await fetch("/api/users/sample?n=8").then(jsonOrError);
-    show("rec-result", r);
-  } catch (e) { show("rec-result", {error: e.message}); }
+    $("rec-result").style.display = "block";
+    $("rec-result").innerHTML = `<p class="note">Try one of these user IDs:</p><div class="row">` +
+      r.sample_user_ids.map(u => `<button class="ghost" onclick="$('rec-uid').value=${u};runRecommend()">${u}</button>`).join("") +
+      `</div>`;
+  } catch (e) { showError("rec-result", e.message); }
 }
 
 // ----- Forecast -----
+function quarterLabel(iso) {
+  if (!iso) return "";
+  const [y, m] = iso.split("-").map(Number);
+  return "Q" + (Math.floor((m - 1) / 3) + 1) + " " + y;
+}
+
 async function refreshGenres() {
   try {
     const r = await fetch("/api/genres").then(jsonOrError);
@@ -264,22 +412,34 @@ async function refreshGenres() {
       sel.appendChild(opt);
     });
   } catch (e) {
-    $("genre-select").innerHTML = "<option>popularity model missing</option>";
+    $("genre-select").innerHTML = "<option>genres unavailable</option>";
   }
 }
 refreshGenres();
 
+function trendBadge(pct) {
+  if (pct === null || pct === undefined) return '<span class="badge">n/a</span>';
+  const up = pct >= 0;
+  const arrow = up ? "↑" : "↓";
+  const sign = up ? "+" : "-";
+  return `<span class="badge ${up ? "up" : "down"}">${arrow} ${sign}${Math.abs(pct)}%</span>`;
+}
+
 async function runForecast() {
   const g = $("genre-select").value;
-  if (!g || g.startsWith("popularity model")) return;
+  if (!g || g.startsWith("genres unavailable")) return;
   try {
     const r = await fetch(`/api/forecast/${encodeURIComponent(g)}`).then(jsonOrError);
-    let html = `<p class="hint">Model: ${r.based_on_model} | horizon: ${r.next_period}</p>`;
-    html += `<div style="font-size:24px;font-weight:600">${r.genre}: <span style="color:var(--accent)">${r.predicted_n_ratings.toLocaleString()}</span> ratings</div>`;
-    html += `<p class="hint">log1p(predicted) = ${r.predicted_log}</p>`;
+    const html = `
+      <div class="fc-title">${escapeHtml(r.genre)} <span class="muted">· ${quarterLabel(r.next_period)} forecast</span></div>
+      <div class="fc-rows">
+        <div class="fcrow"><span class="lab">Last quarter (${quarterLabel(r.last_period)})</span><span>${r.last_quarter_n_ratings.toLocaleString()} ratings</span></div>
+        <div class="fcrow"><span class="lab">Forecast (${quarterLabel(r.next_period)})</span><span class="big">${r.predicted_n_ratings.toLocaleString()} ratings</span></div>
+        <div class="fcrow"><span class="lab">Trend</span>${trendBadge(r.trend_pct)}</div>
+      </div>`;
     $("fc-result").style.display = "block";
     $("fc-result").innerHTML = html;
-  } catch (e) { show("fc-result", {error: e.message}); }
+  } catch (e) { showError("fc-result", e.message); }
 }
 
 async function forecastAll() {
@@ -288,88 +448,135 @@ async function forecastAll() {
     const rows = [];
     for (const g of r.genres) {
       const f = await fetch(`/api/forecast/${encodeURIComponent(g)}`).then(jsonOrError);
-      rows.push({genre: f.genre, next_period: f.next_period, predicted_n_ratings: f.predicted_n_ratings});
+      rows.push({
+        genre: f.genre,
+        forecast: f.predicted_n_ratings.toLocaleString() + " ratings",
+        _sort: f.predicted_n_ratings,
+        trend: (f.trend_pct === null ? "n/a" : (f.trend_pct >= 0 ? "+" : "") + f.trend_pct + "%")
+      });
     }
-    rows.sort((a, b) => b.predicted_n_ratings - a.predicted_n_ratings);
+    rows.sort((a, b) => b._sort - a._sort);
     $("fc-result").style.display = "block";
-    $("fc-result").innerHTML = renderTable(rows, ["genre", "next_period", "predicted_n_ratings"]);
-  } catch (e) { show("fc-result", {error: e.message}); }
+    $("fc-result").innerHTML = renderTable(rows, [
+      {key: "genre", label: "genre"}, {key: "forecast", label: "next quarter"}, {key: "trend", label: "trend"}
+    ]);
+  } catch (e) { showError("fc-result", e.message); }
 }
 
 // ----- Cluster -----
-async function buildClusterForm() {
-  try {
-    const r = await fetch("/api/cluster/template").then(jsonOrError);
-    const cont = $("cluster-form");
-    cont.innerHTML = "";
-    // Render every feature the KMeans model expects. Blank fields default to 0.
-    r.feature_cols.forEach(name => {
-      const lbl = document.createElement("label");
-      let display = name;
-      if (name.startsWith("rmean_")) display = name.slice(6) + " - mean rating";
-      else if (name.startsWith("rshare_")) display = name.slice(7) + " - rating share";
-      else if (name.startsWith("occ_")) display = "Occupation: " + name.slice(4);
-      else if (name === "age_midpoint") display = "Age (midpoint of bucket)";
-      else if (name === "is_female") display = "Female (1 = yes, 0 = no)";
-      lbl.textContent = display;
-      const inp = document.createElement("input");
-      inp.type = "number"; inp.value = ""; inp.dataset.name = name;
-      if (name.startsWith("rmean_")) { inp.step = "0.1"; inp.min = "0.5"; inp.max = "5"; inp.placeholder = "0.5 - 5.0"; }
-      else if (name.startsWith("rshare_")) { inp.step = "0.01"; inp.min = "0"; inp.max = "1"; inp.placeholder = "0.0 - 1.0"; }
-      else if (name.startsWith("occ_")) { inp.step = "1"; inp.min = "0"; inp.max = "1"; inp.placeholder = "0 or 1"; }
-      else if (name === "age_midpoint") { inp.step = "1"; inp.min = "0"; inp.max = "99"; inp.placeholder = "e.g. 28"; }
-      else if (name === "is_female") { inp.step = "1"; inp.min = "0"; inp.max = "1"; inp.placeholder = "0 or 1"; }
-      else { inp.step = "0.01"; inp.placeholder = "0"; }
-      lbl.appendChild(inp);
-      cont.appendChild(lbl);
+function buildClusterForm() {
+  const cont = $("cl-genres");
+  cont.innerHTML = "";
+  GENRES.forEach(g => {
+    const row = document.createElement("div");
+    row.className = "genre-row";
+    row.innerHTML = `
+      <label class="pick"><input type="checkbox" data-genre="${g}"> ${g}</label>
+      <span class="slider-wrap" style="display:none">
+        <input type="range" min="1" max="5" step="0.5" value="4" data-slider="${g}">
+        <span class="sval">4.0</span>
+      </span>`;
+    cont.appendChild(row);
+  });
+  cont.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener("change", () => {
+      const wrap = cb.closest(".genre-row").querySelector(".slider-wrap");
+      wrap.style.display = cb.checked ? "flex" : "none";
     });
-  } catch (e) {
-    $("cluster-form").innerHTML = '<p class="hint" style="color:var(--bad)">' + e.message + "</p>";
-  }
+  });
+  cont.querySelectorAll('input[type=range]').forEach(sl => {
+    sl.addEventListener("input", () => {
+      sl.parentElement.querySelector(".sval").textContent = Number(sl.value).toFixed(1);
+    });
+  });
 }
 buildClusterForm();
 
-async function runCluster() {
-  const inputs = document.querySelectorAll("#cluster-form input");
-  const features = {};
-  inputs.forEach(i => {
-    const v = parseFloat(i.value);
-    if (!isNaN(v)) features[i.dataset.name] = v;
-  });
+async function loadClusterBaseline() {
   try {
-    const r = await fetch("/api/cluster", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
+    const r = await fetch("/api/cluster/template").then(jsonOrError);
+    CLUSTER_BASELINE = r.baseline || {};
+  } catch (e) { CLUSTER_BASELINE = {}; }
+}
+loadClusterBaseline();
+
+// gender toggle
+$("cl-gender").querySelectorAll("button").forEach(b => {
+  b.addEventListener("click", () => {
+    $("cl-gender").querySelectorAll("button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+  });
+});
+
+function collectClusterFeatures() {
+  // Start from the neutral training baseline so unselected genres read as "typical", not 0
+  // (a profile full of 0s used to collapse everyone into the low-activity cluster).
+  const features = Object.assign({}, CLUSTER_BASELINE);
+  Object.keys(features).forEach(k => { if (k.startsWith("occ_")) features[k] = 0; });
+  features["age_midpoint"] = Number($("cl-age").value);
+  features["is_female"] = Number($("cl-gender").querySelector("button.active").dataset.val);
+  features["occ_" + $("cl-occ").value] = 1;
+  // Selected genres override the average rating with the user's slider value.
+  $("cl-genres").querySelectorAll('input[type=checkbox]:checked').forEach(cb => {
+    const slider = cb.closest(".genre-row").querySelector('input[type=range]');
+    features["rmean_" + cb.dataset.genre] = Number(slider.value);
+  });
+  return features;
+}
+
+async function runCluster() {
+  try {
+    const features = collectClusterFeatures();
+    const a = await fetch("/api/cluster", {
+      method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({features})
     }).then(jsonOrError);
-    // KMeans labels are 0-based internally; show 1-based to the user.
-    const display = r.cluster_id + 1;
+    const cid = a.cluster_id;
+    const [prof, recs] = await Promise.all([
+      fetch(`/api/cluster/profile/${cid}`).then(jsonOrError).catch(() => null),
+      fetch(`/api/cluster/recommend/${cid}?n=10`).then(jsonOrError).catch(() => null)
+    ]);
+    let html = `<div class="cluster-desc">
+      <div class="headline">You belong to <span class="accent">Cluster ${cid + 1}</span> of ${a.n_clusters}</div>`;
+    if (prof) {
+      html += `<div class="grow"><span class="k">Typical profile</span><span>${escapeHtml(prof.typical_gender)}, age ${escapeHtml(prof.modal_age_bucket)}, ${escapeHtml(prof.modal_occupation)}</span></div>`;
+      html += `<div class="grow"><span class="k">Top genres</span><span>${escapeHtml(genreLine(prof.top_genres))}</span></div>`;
+      html += `<div class="grow"><span class="k">Group size</span><span>${prof.size.toLocaleString()} users with a similar profile</span></div>`;
+    }
+    html += `</div>`;
+    html += `<p class="note">Based on your answers, here's the viewer group you most closely match.</p>`;
+    if (recs && recs.recommendations && recs.recommendations.length) {
+      html += `<p class="note" style="margin-top:14px;color:var(--text)">Recommended for this profile</p>`;
+      html += recTable(recs.recommendations);
+    }
     $("cluster-result").style.display = "block";
-    $("cluster-result").innerHTML = `<div style="font-size:24px;font-weight:600">Cluster <span style="color:var(--accent)">${display}</span> of ${r.n_clusters}</div>
-      <p class="hint">The profile was standardised with the previously fitted StandardScaler and assigned by KMeans.</p>
-      <pre>${JSON.stringify(features, null, 2)}</pre>`;
-  } catch (e) { show("cluster-result", {error: e.message}); }
+    $("cluster-result").innerHTML = html;
+  } catch (e) { showError("cluster-result", e.message); }
 }
 
 function randomFillCluster() {
-  const inputs = Array.from(document.querySelectorAll("#cluster-form input"));
-  // Pick one occupation at random; everything else gets 0.
-  const occInputs = inputs.filter(i => i.dataset.name.startsWith("occ_"));
-  const chosenOccIdx = Math.floor(Math.random() * occInputs.length);
-  // Rating shares: sample a Dirichlet-ish profile so they roughly sum to 1.
-  const rshareInputs = inputs.filter(i => i.dataset.name.startsWith("rshare_"));
-  const raw = rshareInputs.map(() => Math.random());
-  const total = raw.reduce((a, b) => a + b, 0) || 1;
-  const shares = raw.map(x => x / total);
-  let sIdx = 0;
-  inputs.forEach(i => {
-    const name = i.dataset.name;
-    if (name === "age_midpoint") i.value = 20 + Math.floor(Math.random() * 40);
-    else if (name === "is_female") i.value = Math.random() < 0.5 ? 0 : 1;
-    else if (name.startsWith("rmean_")) i.value = (2.5 + Math.random() * 2.5).toFixed(2);  // [2.5, 5.0]
-    else if (name.startsWith("rshare_")) { i.value = shares[sIdx].toFixed(3); sIdx++; }
-    else if (name.startsWith("occ_")) i.value = occInputs.indexOf(i) === chosenOccIdx ? 1 : 0;
-    else i.value = 0;
+  const ageOpts = $("cl-age").options;
+  $("cl-age").selectedIndex = Math.floor(Math.random() * ageOpts.length);
+  const genderBtns = $("cl-gender").querySelectorAll("button");
+  genderBtns.forEach(x => x.classList.remove("active"));
+  genderBtns[Math.random() < 0.5 ? 0 : 1].classList.add("active");
+  const occOpts = $("cl-occ").options;
+  $("cl-occ").selectedIndex = Math.floor(Math.random() * occOpts.length);
+  // reset genres, then pick 2-3 at random
+  const boxes = Array.from($("cl-genres").querySelectorAll('input[type=checkbox]'));
+  boxes.forEach(b => {
+    b.checked = false;
+    b.closest(".genre-row").querySelector(".slider-wrap").style.display = "none";
+  });
+  const pick = 2 + Math.floor(Math.random() * 5);  // 2..6 genres
+  const shuffled = boxes.slice().sort(() => Math.random() - 0.5).slice(0, pick);
+  shuffled.forEach(b => {
+    b.checked = true;
+    const wrap = b.closest(".genre-row").querySelector(".slider-wrap");
+    wrap.style.display = "flex";
+    const sl = wrap.querySelector("input[type=range]");
+    sl.value = (3 + Math.random() * 2).toFixed(1);
+    wrap.querySelector(".sval").textContent = Number(sl.value).toFixed(1);
   });
 }
 </script>
