@@ -9,7 +9,7 @@ Four independent components, one shared data pipeline:
 
 1. **User profiling (KMeans)** on MovieLens 1M, using genre preferences combined with demographic features.
 2. **Comment sentiment classification** (TF-IDF + Logistic Regression) on MovieLens 20M tags, with weak labels from VADER after a part-of-speech filter.
-3. **Movie recommendations** (collaborative filtering: SVD plus item-based KNN with cosine and Pearson similarity) on MovieLens 1M.
+3. **Movie recommendations** (collaborative filtering: SVD plus item-based KNN with cosine and Pearson similarity) on MovieLens 1M, with a cold-start fallback for profiles the model has not seen.
 4. **Genre popularity forecasting** (regression with seasonal and autoregressive features) on quarterly aggregates from MovieLens 20M.
 
 Two bonus modules:
@@ -55,6 +55,7 @@ Tested environment: Windows 11, PowerShell, project virtual environment under `.
 MovieLens-SR-Mixed/
   src/
     config.py                 # paths, dataset URLs, code mappings, hyperparameters
+    profiles.py               # read-only user and cluster profile lookups for the API
     data/
       download.py, load_1m.py, load_20m.py, clean.py, split.py
     features/
@@ -64,7 +65,7 @@ MovieLens-SR-Mixed/
     sentiment/
       label.py, labeling.py, features.py, train.py, predict.py
     recsys/
-      matrix.py, svd.py, knn.py, evaluate.py, predict.py
+      matrix.py, svd.py, knn.py, evaluate.py, predict.py, cold_start.py
     popularity/
       aggregate.py, features.py, train.py, predict.py
     bonus/
@@ -235,7 +236,7 @@ Output:
 - `reports/popularity/forecast_next.csv`
 - `reports/popularity/time_series_per_genre.png`
 
-### 9. Bonus tasks
+### 9. Bonus
 
 ```powershell
 python scripts/09_bonus.py
@@ -264,11 +265,13 @@ By default the application listens on `http://127.0.0.1:8000`. Open that URL in 
 | GET | `/api/health` | Returns availability flags for every artefact: `sentiment`, `cluster`, `recsys`, `popularity` |
 | POST | `/api/sentiment` | Classify a free-text comment. Body: `{"text": "..."}` |
 | POST | `/api/cluster` | Assign a user profile vector to a cluster. Body: `{"features": {"name": value, ...}}`. Missing features default to 0 |
-| GET | `/api/recommend/{user_id}` | Top-N recommendations for an existing user. Query parameters: `n` (default 10), `model` (`svd`, `knn_cosine`, or `knn_pearson`) |
-| GET | `/api/forecast/{genre}` | Next-quarter popularity forecast for the given genre |
+| GET | `/api/cluster/profile/{cluster_id}` | Human-readable description of a cluster: size, typical demographics, and top genres (from `cluster_profiles.csv`) |
+| GET | `/api/cluster/recommend/{cluster_id}` | Cold-start picks for a profile: the most-watched movies among that cluster's members |
+| GET | `/api/recommend/{user_id}` | Top-N recommendations for a user, plus the user's profile (gender, age, occupation, favourite genres). An unknown user returns `found: false` and a popularity-based cold-start list. Query parameters: `n` (default 10), `model` (`svd`, `knn_cosine`, or `knn_pearson`) |
+| GET | `/api/forecast/{genre}` | Next-quarter popularity forecast for the given genre, plus the last quarter's actual rating count and the percentage trend |
 | GET | `/api/genres` | List of genres available in the popularity model |
 | GET | `/api/users/sample` | Sample user ids that exist in the recommender index (helps the UI demo) |
-| GET | `/api/cluster/template` | List of feature names expected by `/api/cluster` (used by the UI to build the form) |
+| GET | `/api/cluster/template` | Feature names plus per-feature training means; the UI uses the means to seed unselected genres with a neutral baseline |
 
 All endpoints return JSON. Endpoints that depend on an artefact respond with HTTP 503 and a helpful message if the corresponding `joblib` file is missing.
 
@@ -293,14 +296,30 @@ predict_sentiment(["this movie was amazing", "boring and predictable"])
 ```python
 from src.recsys.predict import top_n_for_user
 
-top_n_for_user(user_id=1, n=10, model_name="svd")
+top_n_for_user(user_id=1000, n=10, model_name="svd")
 # [
 #   {"movie_id": 1196, "title": "Star Wars: Episode V - The Empire Strikes Back",
 #    "year": 1980, "predicted_rating": 4.78},
 #   ...
 # ]
 # model_name can also be "knn_cosine" or "knn_pearson".
-# Movies already rated by user 1 in the training split are excluded.
+# Movies already rated by the user in the training split are excluded.
+# The recommender covers users in the training split (ids from about 635 to 6040);
+# an id outside that range returns [] here and triggers the cold-start fallback in the API.
+```
+
+### Cold-start recommendations
+
+```python
+from src.recsys.cold_start import popular_top_n, recommend_for_cluster
+
+# Unknown user: fall back to the globally most-watched movies.
+popular_top_n(n=10)
+
+# Brand-new profile assigned to cluster 4: recommend what that cluster's members watch most.
+recommend_for_cluster(cluster_id=4, n=10)
+# Both return [{"movie_id", "title", "year", "predicted_rating"}, ...] sorted by
+# number of ratings, then by mean rating. predicted_rating is the average rating.
 ```
 
 ### Forecast the next quarter for a genre
@@ -314,6 +333,9 @@ forecast_next_quarter("Drama")
 #   "next_period": "2015-06-30",
 #   "predicted_log": 11.4997,
 #   "predicted_n_ratings": 98687,
+#   "last_period": "2015-03-31",
+#   "last_quarter_n_ratings": 129444,
+#   "trend_pct": -23.8,
 #   "based_on_model": "random_forest",
 # }
 ```
@@ -358,50 +380,13 @@ After steps 1 to 9 you should see roughly these numbers:
 - Silhouette score for the chosen `k*` is above about 0.10 (a realistic threshold for mixed feature types)
 - `models/kmeans.joblib` and `scaler.joblib` load via `joblib.load` and predict a cluster id in `[0, k*-1]` for a new profile
 - `data/processed/tags_labeled.parquet` has tens of thousands of rows with `tag`, `sentiment`, `vader_compound`
-- `models/recsys/svd.joblib` and `item_knn_*.joblib` load and `top_n_for_user(user_id=1, n=10)` returns 10 dictionaries
+- `models/recsys/svd.joblib` and `item_knn_*.joblib` load and `top_n_for_user(user_id=1000, n=10)` returns 10 dictionaries (the recommender covers training-split users, roughly ids 635 to 6040)
 - `reports/popularity/model_comparison.csv` has 3 rows with `rmse_log_test` below about 0.4
 - `reports/popularity/forecast_next.csv` has one row per genre with `predicted_n_ratings` greater than 0
 - `models/popularity/best_model.joblib` loads and `forecast_next_quarter("Drama")` returns a dictionary
 - `reports/bonus/outliers_pca.png` exists; about 5 percent of users are highlighted
 - `reports/bonus/mutual_info_top20.csv` has 20 rows with non-zero mutual information for the top features
 - `GET http://127.0.0.1:8000/api/health` returns `{"ready": {"sentiment": true, "cluster": true, "recsys": true, "popularity": true}}`
-
----
-
-## Design notes
-
-A few decisions worth mentioning, because they shape the code:
-
-- **KMeans only on ml-1m**, because demographic features only exist in that dataset. ml-20m is used wherever scale or text is more important than demographics.
-- **Intermediate format is parquet**, not CSV. Preserves dtypes (including list columns such as `genres_list`) and reads quickly.
-- **`latin-1` encoding for ml-1m `.dat` files**, because some titles contain diacritics.
-- **No elbow plot for KMeans**. The choice of `k` is automatic, based on silhouette score with a Davies-Bouldin tie-breaker. Numeric output goes into `reports/k_selection.csv`.
-- **Chronological split** for ratings (`time_split` in `src/data/split.py`), to avoid future leakage in recommender and popularity evaluations.
-- **`genome-scores.csv`** (about 300 MB) is **not** loaded yet. The pipeline checks its integrity but does not extract features from it.
-- **Sentiment is binary**, not 3-class. Neutrals are dropped at the VADER step; this produces a cleaner training signal at the cost of full coverage.
-- **Stratified split for sentiment**, not chronological, because there is no future-leakage concern for tag sentiment.
-- **TF-IDF combines word and `char_wb` n-grams** to be robust to misspellings, which are common in user-generated tags.
-- **SVD via `scipy.sparse.linalg.svds`** instead of `scikit-surprise`. svds is reliable on Windows and avoids a Cython dependency.
-- **Mean-centered ratings before SVD**, otherwise the first singular values capture global biases rather than taste structure.
-- **Item-based KNN, not user-based**, because there are fewer items than users in ml-1m, so the similarity matrix is smaller and item profiles are more stable.
-- **Pearson similarity is implemented as cosine on a user-mean-centered matrix**, which is mathematically equivalent for pairs with full support and much faster.
-- **Hit-rate@10 with rating threshold 4.0**. Sample 1 000 users for the evaluation loop to keep it fast while still precise.
-- **Cold pairs are dropped from RMSE and MAE**. Cold-start is a separate problem; the chronological split guarantees some test users or items are absent from training.
-- **One regression model for every genre**, with the genre encoded implicitly through its own lag features. Simpler to persist than 20 separate models, and lets the model learn shared seasonal patterns.
-- **`log1p(n_ratings)` as the target** for popularity, because absolute popularity spans about three orders of magnitude across genres.
-- **Walk-forward evaluation** for popularity (last 4 quarters held out), instead of cross-validation, because we are forecasting.
-- **Drop the incomplete last quarter** automatically: ml-20m ends mid Q1 2015, so the final point would otherwise distort lag features.
-- **Lazy loading inside FastAPI** (`lru_cache`): the application starts immediately, models are loaded on first use. `/api/health` reflects which artefacts are available.
-- **Single-page vanilla HTML and JavaScript** UI: no build step, easy to review at a glance.
-- **All endpoints return JSON**. The UI is purely a presentation layer.
----
-
-## Troubleshooting
-
-- **`ImportError: cannot import name 'clone' from partially initialized module 'sklearn.base'`**: a circular import that can appear under `uvicorn --reload`. The fix is already in `main.py`, which pre-imports the sklearn estimator classes at module load time.
-- **`ValueError: Buffer dtype mismatch, expected 'const double' but got 'float'`** from KMeans: scikit-learn 1.4 and above require `float64` arrays. Both `src/clustering/kmeans.py` and the `/api/cluster` endpoint cast inputs to `float64` after the scaler. If you still see this error, make sure your trained `scaler.joblib` and `kmeans.joblib` were produced by the current version of the code.
-- **`HTTP 503` from an endpoint**: the corresponding model artefact is missing. The response body says which script to run (for example "run scripts/07_recsys.py first").
-- **NLTK data downloads**: the sentiment step uses `averaged_perceptron_tagger_eng`. If NLTK complains about missing data, run `python -c "import nltk; nltk.download('averaged_perceptron_tagger_eng')"` once.
 
 ---
 
